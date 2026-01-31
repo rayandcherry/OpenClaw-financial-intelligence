@@ -29,5 +29,16 @@ def send_telegram_report(report_text):
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
         print("✅ Report sent to Telegram.")
+    except requests.exceptions.HTTPError as e:
+        if response.status_code == 400:
+            print("⚠️ Telegram rejected Markdown format. Retrying as plain text...")
+            payload["parse_mode"] = None
+            try:
+                requests.post(url, json=payload, timeout=10).raise_for_status()
+                print("✅ Report sent (Plain Text fallback).")
+            except Exception as e2:
+                print(f"❌ Failed to send Telegram message (Fallback): {e2}")
+        else:
+            print(f"❌ Failed to send Telegram message: {e}")
     except Exception as e:
         print(f"❌ Failed to send Telegram message: {e}")
