@@ -60,9 +60,60 @@ def calculate_indicators(df):
     
     return df
 
-def check_trinity_setup(row, params=None) -> dict:
+def backtest_performance(df, strategy_type, signal_indices):
     """
-    Trinity Strategy (Updated): Trend Pullback + ATR Risk Management.
+    Lightweight backtester to calculate Win Rate for the identified strategy.
+    
+    Args:
+        df: DataFrame with OHLC + ATR
+        strategy_type: 'trinity' or 'panic'
+        signal_indices: List of index positions where this signal triggered in the past
+    
+    Returns:
+        dict: {win_rate: float, total_trades: int}
+    """
+    if not signal_indices:
+        return {"win_rate": 0.0, "total_trades": 0}
+
+    wins = 0
+    losses = 0
+    
+    # Parameters based on strategy
+    tp_mult = 2.0 if strategy_type == 'trinity' else 3.0
+    sl_mult = 2.0 if strategy_type == 'trinity' else 1.0
+    
+    for idx in signal_indices:
+        if idx >= len(df) - 1: # Cannot test the most recent candle (it's the current signal)
+            continue
+            
+        entry_price = df['Close'].iloc[idx]
+        atr = df['ATR_14'].iloc[idx]
+        
+        if pd.isna(atr):
+            continue
+
+        tp_price = entry_price + (atr * tp_mult)
+        sl_price = entry_price - (atr * sl_mult)
+        
+        # Look forward up to 20 candles
+        future_candles = df.iloc[idx+1 : idx+21]
+        
+        for _, row in future_candles.iterrows():
+            if row['High'] >= tp_price:
+                wins += 1
+                break
+            if row['Low'] <= sl_price:
+                losses += 1
+                break
+                
+    total = wins + losses
+    win_rate = (wins / total * 100) if total > 0 else 0.0
+    
+    return {"win_rate": round(win_rate, 1), "total_trades": total}
+
+def check_trinity_setup(row, df_context=None) -> dict:
+    """
+    Trinity Strategy (Updated): Trend Pullback + ATR Risk + Backtest.
     """
     price = row['Close']
     sma200 = row.get('SMA_200')
@@ -88,15 +139,23 @@ def check_trinity_setup(row, params=None) -> dict:
     if not (35 <= rsi <= 65):
         return None
 
-    # --- DYNAMIC RISK MANAGEMENT (The Pro Upgrade) ---
-    # Instead of fixed 3%, use 2x ATR. This adapts to the stock's personality.
+    # --- DYNAMIC RISK MANAGEMENT ---
     stop_loss = round(price - (2.0 * atr), 2)
-    
-    # Safety Check: Don't let SL be ABOVE SMA200 (Major support)
     stop_loss = min(stop_loss, sma200)
-    
     risk = price - stop_loss
-    take_profit = round(price + (risk * 2), 2) # 1:2 R/R
+    take_profit = round(price + (risk * 2), 2)
+
+    # --- HISTORICAL BACKTEST (Optional) ---
+    stats = {"win_rate": 0, "total_trades": 0}
+    if df_context is not None:
+        mask = (df_context['Close'] > df_context['SMA_200']) & \
+               ((df_context['Close'] - df_context['EMA_50']) / df_context['EMA_50'] >= -0.015) & \
+               ((df_context['Close'] - df_context['EMA_50']) / df_context['EMA_50'] <= 0.03) & \
+               (df_context['RSI_14'] >= 35) & (df_context['RSI_14'] <= 65)
+        
+        signal_indices = df_context.index[mask].tolist()
+        int_indices = [df_context.index.get_loc(i) for i in signal_indices]
+        stats = backtest_performance(df_context, 'trinity', int_indices)
 
     return {
         "strategy": "trinity",
@@ -106,6 +165,7 @@ def check_trinity_setup(row, params=None) -> dict:
             "rsi": round(rsi, 1),
             "macd_bullish": bool(macd > macd_signal)
         },
+        "stats": stats,
         "plan": {
             "stop_loss": stop_loss,
             "take_profit": take_profit,
@@ -113,9 +173,9 @@ def check_trinity_setup(row, params=None) -> dict:
         }
     }
 
-def check_panic_setup(row, params=None) -> dict:
+def check_panic_setup(row, df_context=None) -> dict:
     """
-    Panic Strategy (Updated): Mean Reversion + ATR Targets.
+    Panic Strategy (Updated): Mean Reversion + ATR Targets + Backtest.
     """
     price = row['Close']
     bbl = row.get('BBL_20_2.0')
@@ -134,17 +194,24 @@ def check_panic_setup(row, params=None) -> dict:
     if rsi >= 30:
         return None
 
-    # Logic 3: Capitulation Volume (RVOL > 1.2) - Filter out "slow bleeds"
+    # Logic 3: Capitulation Volume (RVOL > 1.2)
     if rvol < 1.2:
         return None
 
     # --- DYNAMIC RISK MANAGEMENT ---
-    # Catching a falling knife requires a TIGHT stop.
     stop_loss = round(price - (1.0 * atr), 2)
-    risk = price - stop_loss
-    
-    # Target is usually the Reversion to Mean (e.g., Price + 3x ATR)
     take_profit = round(price + (3.0 * atr), 2)
+
+    # --- HISTORICAL BACKTEST (Optional) ---
+    stats = {"win_rate": 0, "total_trades": 0}
+    if df_context is not None:
+        mask = (df_context['Close'] < df_context['BBL_20_2.0']) & \
+               (df_context['RSI_14'] < 30) & \
+               (df_context['RVOL'] > 1.2)
+        
+        signal_indices = df_context.index[mask].tolist()
+        int_indices = [df_context.index.get_loc(i) for i in signal_indices]
+        stats = backtest_performance(df_context, 'panic', int_indices)
 
     return {
         "strategy": "panic",
@@ -154,6 +221,7 @@ def check_panic_setup(row, params=None) -> dict:
             "rvol": round(rvol, 1),
             "dist_below_bb": f"{round(((bbl - price)/bbl)*100, 1)}%"
         },
+        "stats": stats,
         "plan": {
             "stop_loss": stop_loss,
             "take_profit": take_profit,
