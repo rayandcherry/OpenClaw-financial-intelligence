@@ -45,28 +45,20 @@ def scan_market(tickers):
         latest = df.iloc[-1]
         
         # Check Strategies
-        is_trinity = check_trinity_setup(latest, STRATEGY_PARAMS['TRINITY'])
-        is_panic = check_panic_setup(latest, STRATEGY_PARAMS['PANIC'])
+        trinity_result = check_trinity_setup(latest)
+        panic_result = check_panic_setup(latest)
         
-        if is_trinity:
+        if trinity_result:
             candidates.append({
                 "ticker": ticker,
-                "strategy": "TRINITY",
-                "price": latest['Close'],
-                "rsi": latest['RSI_14'],
-                "bb_lower": latest['BBL_20_2.0'],
-                "sma200": latest['SMA_200'],
-                "ema50": latest['EMA_50']
+                **trinity_result
             })
             print(f"✅ FOUND TRINITY: {ticker}")
             
-        elif is_panic:
+        elif panic_result:
             candidates.append({
                 "ticker": ticker,
-                "strategy": "PANIC",
-                "price": latest['Close'],
-                "rsi": latest['RSI_14'],
-                "bb_lower": latest['BBL_20_2.0']
+                **panic_result
             })
             print(f"🚨 FOUND PANIC: {ticker}")
 
@@ -98,7 +90,10 @@ def main():
     print("\n📰 Fetching Context...")
     for c in candidates:
         # Format Technical Data
-        data_summary += f"- **{c['ticker']}** ({c['strategy']}): Price ${c['price']:.2f}, RSI {c['rsi']:.2f}\n"
+        metric_str = ", ".join([f"{k}={v}" for k, v in c['metrics'].items()])
+        plan_str = f"SL=${c['plan']['stop_loss']}, TP=${c['plan']['take_profit']} ({c['plan']['risk_reward']})"
+        
+        data_summary += f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | {metric_str} | Plan: {plan_str}\n"
         
         # Fetch News (Limit to prevent API bloat)
         news = get_market_news(f"{c['ticker']} stock crypto news", max_results=2)
