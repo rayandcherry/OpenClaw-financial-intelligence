@@ -45,8 +45,9 @@ def scan_market(tickers):
         latest = df.iloc[-1]
         
         # Check Strategies
-        trinity_result = check_trinity_setup(latest)
-        panic_result = check_panic_setup(latest)
+        # Pass the full DF for backtesting context
+        trinity_result = check_trinity_setup(latest, df)
+        panic_result = check_panic_setup(latest, df)
         
         if trinity_result:
             candidates.append({
@@ -87,13 +88,18 @@ def main():
     data_summary = ""
     news_context = ""
     
+    # Language Selection
+    lang = os.getenv("REPORT_LANG", "EN").upper()
+    lang_prompt = "English" if lang == "EN" else "Traditional Chinese (繁體中文)"
+    
     print("\n📰 Fetching Context...")
     for c in candidates:
         # Format Technical Data
         metric_str = ", ".join([f"{k}={v}" for k, v in c['metrics'].items()])
         plan_str = f"SL=${c['plan']['stop_loss']}, TP=${c['plan']['take_profit']} ({c['plan']['risk_reward']})"
+        backtest_str = f"Win Rate: {c['stats']['win_rate']}% ({c['stats']['total_trades']} trades)"
         
-        data_summary += f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | {metric_str} | Plan: {plan_str}\n"
+        data_summary += f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | {metric_str} | {backtest_str} | Plan: {plan_str}\n"
         
         # Fetch News (Limit to prevent API bloat)
         news = get_market_news(f"{c['ticker']} stock crypto news", max_results=2)
@@ -105,6 +111,9 @@ def main():
         # Load System Prompt
         with open("src/prompts/SOUL.md", "r") as f:
             system_prompt = f.read()
+            
+        # Append Language Instruction
+        system_prompt += f"\n\nIMPORTANT: You must output the final report in **{lang_prompt}**."
             
         client = GeminiClient()
         report = client.generate_report(data_summary, news_context, system_prompt)
