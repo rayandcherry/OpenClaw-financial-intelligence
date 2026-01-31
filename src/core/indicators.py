@@ -1,26 +1,50 @@
 import pandas as pd
-import pandas_ta as ta
+import numpy as np
 
 def calculate_indicators(df):
     """
-    Applies technical indicators to the dataframe using pandas_ta.
+    Applies technical indicators to the dataframe using standard pandas.
     """
     if df.empty:
         return df
 
+    # Helper for RSI
+    def calculate_rsi(series, period=14):
+        delta = series.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        
+        # Use EMA for RSI if preferred, but simple rolling is standard in some libs. 
+        # For precision with pandas_ta default (Wilder's Smoothing), we use ewm:
+        # gain = delta.where(delta > 0, 0).ewm(alpha=1/period, adjust=False).mean()
+        # loss = -delta.where(delta < 0, 0).ewm(alpha=1/period, adjust=False).mean()
+        # Let's stick to simple Wilders-like EMA for consistency with tradingview
+        gain = delta.where(delta > 0, 0).ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+        loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+
+    close = df['Close']
+
     # Simple Moving Averages
-    df.ta.sma(length=200, append=True)
-    df.ta.sma(length=50, append=True)
+    df['SMA_200'] = close.rolling(window=200).mean()
+    df['SMA_50'] = close.rolling(window=50).mean()
     
     # Exponential Moving Averages
-    df.ta.ema(length=50, append=True)
-    df.ta.ema(length=20, append=True)
+    df['EMA_50'] = close.ewm(span=50, adjust=False).mean()
+    df['EMA_20'] = close.ewm(span=20, adjust=False).mean()
     
-    # RSI
-    df.ta.rsi(length=14, append=True)
+    # RSI (14)
+    df['RSI_14'] = calculate_rsi(close, 14)
     
-    # Bollinger Bands
-    df.ta.bbands(length=20, std=2.0, append=True)
+    # Bollinger Bands (20, 2.0)
+    # Middle Band = SMA 20
+    sma20 = close.rolling(window=20).mean()
+    std20 = close.rolling(window=20).std()
+    
+    df['BBL_20_2.0'] = sma20 - (2 * std20) # Lower
+    df['BBU_20_2.0'] = sma20 + (2 * std20) # Upper
     
     return df
 

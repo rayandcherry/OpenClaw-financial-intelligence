@@ -1,6 +1,5 @@
 yfinance
 pandas
-pandas_ta
 google-generativeai
 duckduckgo-search
 requests

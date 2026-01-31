@@ -11,8 +11,8 @@ def send_telegram_report(report_text):
     token = os.getenv("TELEGRAM_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
 
-    if not token or not chat_id:
-        print("⚠️ Telegram credentials missing. Printing report to stdout instead.")
+    if not token or not chat_id or token == "test_dummy_token" or token == "your_telegram_bot_token_here":
+        print("⚠️ Telegram credentials missing or invalid (Dry Run). Printing report to stdout instead.")
         print("-" * 40)
         print(report_text)
         print("-" * 40)

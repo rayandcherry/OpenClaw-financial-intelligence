@@ -1,6 +1,7 @@
 import os
 import sys
 import datetime
+import pandas as pd
 import yfinance as yf
 from dotenv import load_dotenv
 
@@ -19,6 +20,9 @@ def fetch_data(ticker):
         df = yf.download(ticker, period="1y", interval="1d", progress=False)
         if df.empty:
             return None
+        # Flatten MultiIndex if present (yfinance update fix)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
         return df
     except Exception as e:
         print(f"Error fetching {ticker}: {e}")
