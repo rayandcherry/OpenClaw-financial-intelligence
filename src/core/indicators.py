@@ -58,58 +58,128 @@ def calculate_indicators(df):
     # ATR 14 smoothing
     df['ATR_14'] = tr.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
     
+    # --- 6. Market Regime Classification ---
+    # Bull: Price > SMA200 & SMA200 Rising
+    # Bear: Price < SMA200 & SMA200 Falling
+    # Sideways: Else
+    sma200_slope = df['SMA_200'].diff()
+    
+    conditions = [
+        (close > df['SMA_200']) & (sma200_slope > 0),
+        (close < df['SMA_200']) & (sma200_slope < 0)
+    ]
+    choices = ['Bull', 'Bear']
+    df['Regime'] = np.select(conditions, choices, default='Sideways')
+    
     return df
 
-def backtest_performance(df, strategy_type, signal_indices):
+def backtest_regime_performance(df, strategy_type):
     """
-    Lightweight backtester to calculate Win Rate for the identified strategy.
-    
-    Args:
-        df: DataFrame with OHLC + ATR
-        strategy_type: 'trinity' or 'panic'
-        signal_indices: List of index positions where this signal triggered in the past
-    
-    Returns:
-        dict: {win_rate: float, total_trades: int}
+    Advanced Backtester: 
+    1. Identifies all past signals based on strategy logic.
+    2. Simulates trades with Dynamic ATR SL/TP.
+    3. Segregates performance by Market Regime (Bull/Bear/Sideways).
+    4. Checks for recent strategy decay (Self-Correction).
     """
-    if not signal_indices:
-        return {"win_rate": 0.0, "total_trades": 0}
+    if df.empty:
+        return {}
 
-    wins = 0
-    losses = 0
-    
-    # Parameters based on strategy
-    tp_mult = 2.0 if strategy_type == 'trinity' else 3.0
-    sl_mult = 2.0 if strategy_type == 'trinity' else 1.0
-    
-    for idx in signal_indices:
-        if idx >= len(df) - 1: # Cannot test the most recent candle (it's the current signal)
-            continue
-            
-        entry_price = df['Close'].iloc[idx]
-        atr = df['ATR_14'].iloc[idx]
+    # 1. Identify Signals
+    if strategy_type == 'trinity':
+        # Trend Pullback: Price > SMA200, Pullback to EMA50, RSI Healthy
+        signals = (df['Close'] > df['SMA_200']) & \
+                  ((df['Close'] - df['EMA_50']) / df['EMA_50'] >= -0.015) & \
+                  ((df['Close'] - df['EMA_50']) / df['EMA_50'] <= 0.03) & \
+                  (df['RSI_14'] >= 35) & (df['RSI_14'] <= 65)
+        tp_mult, sl_mult = 2.0, 2.0
         
-        if pd.isna(atr):
-            continue
+    elif strategy_type == 'panic':
+        # Mean Reversion: Price < BB Low, RSI < 30, High Vol
+        signals = (df['Close'] < df['BBL_20_2.0']) & \
+                  (df['RSI_14'] < 30) & \
+                  (df['RVOL'] > 1.2)
+        tp_mult, sl_mult = 3.0, 1.0
+    
+    signal_indices = df.index[signals].tolist()
+    
+    # 2. Run Simulation
+    results = []
+    
+    for date_idx in signal_indices:
+        idx = df.index.get_loc(date_idx)
+        if idx >= len(df) - 1: continue # Skip current candle
+        
+        entry_row = df.iloc[idx]
+        entry_price = entry_row['Close']
+        atr = entry_row['ATR_14']
+        regime = entry_row['Regime']
+        
+        if pd.isna(atr): continue
 
-        tp_price = entry_price + (atr * tp_mult)
-        sl_price = entry_price - (atr * sl_mult)
+        # Dynamic Exits
+        sl = entry_price - (atr * sl_mult)
+        tp = entry_price + (atr * tp_mult)
         
-        # Look forward up to 20 candles
+        # Check outcome (look forward 20 days max)
+        outcome = 'hold'
         future_candles = df.iloc[idx+1 : idx+21]
         
         for _, row in future_candles.iterrows():
-            if row['High'] >= tp_price:
-                wins += 1
+            if row['High'] >= tp:
+                outcome = 'win'
                 break
-            if row['Low'] <= sl_price:
-                losses += 1
+            if row['Low'] <= sl:
+                outcome = 'loss'
                 break
-                
-    total = wins + losses
-    win_rate = (wins / total * 100) if total > 0 else 0.0
+        
+        # Record trade
+        results.append({
+            'date': date_idx,
+            'regime': regime,
+            'outcome': outcome
+        })
+
+    # 3. Aggregate Stats
+    df_res = pd.DataFrame(results)
+    stats = {
+        "total": {"wr": 0, "count": 0},
+        "bull": {"wr": 0, "count": 0},
+        "bear": {"wr": 0, "count": 0},
+        "sideways": {"wr": 0, "count": 0},
+        "recent_decay": False,
+        "warning": None
+    }
     
-    return {"win_rate": round(win_rate, 1), "total_trades": total}
+    if df_res.empty:
+        return stats
+
+    # Calculate Win Rates Helper
+    def calc_wr(d):
+        if d.empty: return 0, 0
+        wins = len(d[d['outcome'] == 'win'])
+        total = len(d[d['outcome'].isin(['win', 'loss'])]) # Exclude 'hold' from denominator
+        if total == 0: return 0, 0
+        return round((wins / total) * 100, 1), total
+
+    stats['total']['wr'], stats['total']['count'] = calc_wr(df_res)
+    stats['bull']['wr'], stats['bull']['count'] = calc_wr(df_res[df_res['regime'] == 'Bull'])
+    stats['bear']['wr'], stats['bear']['count'] = calc_wr(df_res[df_res['regime'] == 'Bear'])
+    stats['sideways']['wr'], stats['sideways']['count'] = calc_wr(df_res[df_res['regime'] == 'Sideways'])
+
+    # 4. Self-Correction (Recent 14 Days vs Total)
+    # Check trades in the last 14 days of data available in the DF
+    last_date = df.index[-1]
+    recent_cutoff = last_date - pd.Timedelta(days=14)
+    recent_trades = df_res[df_res['date'] >= recent_cutoff]
+    
+    if not recent_trades.empty:
+        recent_wr, recent_count = calc_wr(recent_trades)
+        # Threshold: If recent WR < 50% of Total WR AND trade count >= 2
+        if recent_count >= 2 and recent_wr < (stats['total']['wr'] * 0.5):
+            stats['recent_decay'] = True
+            stats['warning'] = f"Strategy Failure Warning: Recent win rate ({recent_wr}%) is significantly below historical average ({stats['total']['wr']}%)"
+
+    return stats
 
 def check_trinity_setup(row, df_context=None) -> dict:
     """
@@ -145,25 +215,23 @@ def check_trinity_setup(row, df_context=None) -> dict:
     risk = price - stop_loss
     take_profit = round(price + (risk * 2), 2)
 
-    # --- HISTORICAL BACKTEST (Optional) ---
-    stats = {"win_rate": 0, "total_trades": 0}
-    if df_context is not None:
-        mask = (df_context['Close'] > df_context['SMA_200']) & \
-               ((df_context['Close'] - df_context['EMA_50']) / df_context['EMA_50'] >= -0.015) & \
-               ((df_context['Close'] - df_context['EMA_50']) / df_context['EMA_50'] <= 0.03) & \
-               (df_context['RSI_14'] >= 35) & (df_context['RSI_14'] <= 65)
-        
-        signal_indices = df_context.index[mask].tolist()
-        int_indices = [df_context.index.get_loc(i) for i in signal_indices]
-        stats = backtest_performance(df_context, 'trinity', int_indices)
+    # --- REGIME BACKTEST ---
+    stats = backtest_regime_performance(df_context, 'trinity') if df_context is not None else {}
+    
+    # Confidence Score Calc
+    confidence = 80 # Base
+    if stats.get('recent_decay'): confidence = 20
+    if stats.get('total', {}).get('wr', 0) > 60: confidence += 10
 
     return {
         "strategy": "trinity",
         "price": price,
+        "confidence": confidence,
         "metrics": {
             "dist_to_ema": f"{round(dist_to_ema_pct*100, 2)}%",
             "rsi": round(rsi, 1),
-            "macd_bullish": bool(macd > macd_signal)
+            "macd_bullish": bool(macd > macd_signal),
+            "regime": row.get('Regime', 'Unknown')
         },
         "stats": stats,
         "plan": {
@@ -202,24 +270,23 @@ def check_panic_setup(row, df_context=None) -> dict:
     stop_loss = round(price - (1.0 * atr), 2)
     take_profit = round(price + (3.0 * atr), 2)
 
-    # --- HISTORICAL BACKTEST (Optional) ---
-    stats = {"win_rate": 0, "total_trades": 0}
-    if df_context is not None:
-        mask = (df_context['Close'] < df_context['BBL_20_2.0']) & \
-               (df_context['RSI_14'] < 30) & \
-               (df_context['RVOL'] > 1.2)
-        
-        signal_indices = df_context.index[mask].tolist()
-        int_indices = [df_context.index.get_loc(i) for i in signal_indices]
-        stats = backtest_performance(df_context, 'panic', int_indices)
+    # --- REGIME BACKTEST ---
+    stats = backtest_regime_performance(df_context, 'panic') if df_context is not None else {}
+
+    # Confidence Score Calc
+    confidence = 75 # Base for Panic (Riskier)
+    if stats.get('recent_decay'): confidence = 15 # Severe penalty
+    if stats.get('total', {}).get('wr', 0) > 70: confidence += 15 # High reward if history supports
 
     return {
         "strategy": "panic",
         "price": price,
+        "confidence": confidence,
         "metrics": {
             "rsi": round(rsi, 1),
             "rvol": round(rvol, 1),
-            "dist_below_bb": f"{round(((bbl - price)/bbl)*100, 1)}%"
+            "dist_below_bb": f"{round(((bbl - price)/bbl)*100, 1)}%",
+            "regime": row.get('Regime', 'Unknown')
         },
         "stats": stats,
         "plan": {

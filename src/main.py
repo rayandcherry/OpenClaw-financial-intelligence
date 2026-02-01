@@ -97,9 +97,22 @@ def main():
         # Format Technical Data
         metric_str = ", ".join([f"{k}={v}" for k, v in c['metrics'].items()])
         plan_str = f"SL=${c['plan']['stop_loss']}, TP=${c['plan']['take_profit']} ({c['plan']['risk_reward']})"
-        backtest_str = f"Win Rate: {c['stats']['win_rate']}% ({c['stats']['total_trades']} trades)"
         
-        data_summary += f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | {metric_str} | {backtest_str} | Plan: {plan_str}\n"
+        # Format Backtest Data
+        stats = c['stats']
+        backtest_str = (
+            f"WR Total: {stats['total']['wr']}% ({stats['total']['count']} trades) | "
+            f"Bull: {stats['bull']['wr']}% ({stats['bull']['count']}) | "
+            f"Bear: {stats['bear']['wr']}% ({stats['bear']['count']}) | "
+            f"Side: {stats['sideways']['wr']}% ({stats['sideways']['count']})"
+        )
+        
+        if stats.get('warning'):
+            backtest_str += f"\n⚠️ WARNING: {stats['warning']}"
+        
+        data_summary += f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | Confidence: {c['confidence']} | {metric_str}\n"
+        data_summary += f"  - Backtest: {backtest_str}\n"
+        data_summary += f"  - Plan: {plan_str}\n"
         
         # Fetch News (Limit to prevent API bloat)
         news = get_market_news(f"{c['ticker']} stock crypto news", max_results=2)
