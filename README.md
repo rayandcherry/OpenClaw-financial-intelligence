@@ -5,12 +5,19 @@
 ## 🚀 Features
 
 *   **Multi-Asset Scanning:** Covers US Blue Chips (S&P 500 leaders) and Top 20 Cryptocurrencies.
-*   **Dual-Strategy Logic:**
+*   **Multi-Strategy Logic:**
     *   🛡️ **Trinity:** Trend continuation strategy (Pullback to EMA50 in an SMA200 uptrend).
     *   🔥 **Panic:** Mean reversion strategy (Oversold RSI < 30 + Below Bollinger Bands).
+    *   🔄 **2B Reversal:** Potential bottom/top reversal setup.
 *   **AI Analyst:** Uses Google Gemini (via `google-generativeai`) to synthesize technical data with recent news.
 *   **News Filter:** Integrates DuckDuckGo to check for fundamental red flags before reporting.
 *   **Zero-Trust Security:** No hardcoded keys. All configuration via `.env`.
+
+## 💡 Design Philosophy
+
+*   **Efficient Funnel Architecture:** Uses `ThreadPoolExecutor` to concurrently scan huge lists of assets. Only valid candidates trigger expensive operations (News API & LLM), ensuring maximum cost-efficiency.
+*   **High Modularity:** strict separation of concerns (Data, Analysis, Intelligence, Notification) allows for easy component swapping.
+*   **Fault Tolerance:** Built-in fallback mechanisms ensure reports are generated even if the LLM provider experiences downtime.
 
 ## 🛠️ Installation
 
@@ -34,6 +41,7 @@
     *   `GEMINI_API_KEY`: Required for report generation.
     *   `TELEGRAM_TOKEN` & `TELEGRAM_CHAT_ID`: Required for delivery.
     *   `SCAN_MODE`: Set to `US`, `CRYPTO`, or `ALL`.
+    *   `REPORT_LANG`: Set to `EN` or `ZH` (Traditional Chinese).
 
 ## 🏃 Usage
 
