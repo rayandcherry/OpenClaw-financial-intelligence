@@ -51,6 +51,85 @@ The system will:
 5.  Generate a report via LLM.
 6.  Send it to Telegram.
 
+## 🏗️ Architecture
+
+### Component Structure
+
+```mermaid
+graph TD
+    classDef config fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef core fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef ext fill:#dfd,stroke:#333,stroke-width:2px;
+
+    Entry[src/main.py]:::core
+    Config[src/config.py]:::config
+    Env[.env]:::config
+    
+    subgraph Core Modules
+        Indicators[core/indicators.py]:::core
+        News[core/news.py]:::core
+        LLM[core/llm_client.py]:::core
+        Notifier[core/notifier.py]:::core
+    end
+
+    subgraph External APIs
+        YF[Yahoo Finance]:::ext
+        DDG[DuckDuckGo]:::ext
+        Gemini[Google Gemini]:::ext
+        TG[Telegram]:::ext
+    end
+
+    Entry -->|Load Settings| Config
+    Entry -->|Load Secrets| Env
+    Config -->|Define Tickers| Entry
+
+    Entry -->|Concurrently Fetch| YF
+    Entry -->|Calculate| Indicators
+    
+    Entry -->|Fetch Context| News
+    News -->|Search| DDG
+    
+    Entry -->|Generate Report| LLM
+    LLM -->|API Call| Gemini
+    
+    Entry -->|Send| Notifier
+    Notifier -->|Push| TG
+```
+
+### Execution Flow (Multi-threaded)
+
+```mermaid
+sequenceDiagram
+    participant Main as src/main.py
+    participant Pool as ThreadPoolExecutor
+    participant Worker as process_ticker()
+    participant YF as yfinance
+    participant Ind as indicators.py
+
+    Main->>Pool: Submit Tasks (Tickers)
+    activate Pool
+    
+    par Parallel Execution
+        Pool->>Worker: Ticker A
+        Worker->>YF: Download Data
+        YF-->>Worker: DataFrame
+        Worker->>Ind: Calculate Indicators
+        Worker->>Ind: Check Strategies (Trinity/Panic/2B)
+        Worker-->>Pool: Result (Candidate/None)
+    and
+        Pool->>Worker: Ticker B
+        Worker->>YF: Download Data
+        YF-->>Worker: DataFrame
+        Worker->>Ind: Calculate Indicators
+        Worker-->>Pool: Result (Candidate/None)
+    end
+    
+    deactivate Pool
+    Pool-->>Main: List[Candidates]
+
+    Main->>Main: Fetch News & Generate Report
+```
+
 ## ⚠️ Disclaimer
 
 **OpenClaw is an experimental research tool.** 
