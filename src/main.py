@@ -28,15 +28,17 @@ def fetch_data(ticker):
         print(f"Error fetching {ticker}: {e}")
         return None
 
-def scan_market(tickers):
-    candidates = []
-    
-    print(f"🔍 Scanning {len(tickers)} assets...")
-    
-    for ticker in tickers:
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def process_ticker(ticker):
+    """
+    Worker function to process a single ticker.
+    Returns a candidate dict if a strategy matches, else None.
+    """
+    try:
         df = fetch_data(ticker)
         if df is None:
-            continue
+            return None
             
         # Calc Indicators
         df = calculate_indicators(df)
@@ -51,25 +53,49 @@ def scan_market(tickers):
         reversal_result = check_2b_setup(latest, df)
         
         if trinity_result:
-            candidates.append({
+            print(f"✅ FOUND TRINITY: {ticker}")
+            return {
                 "ticker": ticker,
                 **trinity_result
-            })
-            print(f"✅ FOUND TRINITY: {ticker}")
+            }
             
         elif panic_result:
-            candidates.append({
+            print(f"🚨 FOUND PANIC: {ticker}")
+            return {
                 "ticker": ticker,
                 **panic_result
-            })
-            print(f"🚨 FOUND PANIC: {ticker}")
+            }
 
         elif reversal_result:
-            candidates.append({
+            print(f"🔄 FOUND 2B REVERSAL: {ticker}")
+            return {
                 "ticker": ticker,
                 **reversal_result
-            })
-            print(f"🔄 FOUND 2B REVERSAL: {ticker}")
+            }
+            
+        return None
+
+    except Exception as e:
+        print(f"Error processing {ticker}: {e}")
+        return None
+
+def scan_market(tickers):
+    candidates = []
+    
+    print(f"🔍 Scanning {len(tickers)} assets...")
+    
+    # Use ThreadPoolExecutor for concurrent scanning
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers}
+        
+        for future in as_completed(future_to_ticker):
+            ticker = future_to_ticker[future]
+            try:
+                result = future.result()
+                if result:
+                    candidates.append(result)
+            except Exception as exc:
+                print(f"{ticker} generated an exception: {exc}")
 
     return candidates
 
