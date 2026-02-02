@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from config import STRATEGY_PARAMS
 
 def calculate_indicators(df):
     """
@@ -206,7 +207,10 @@ def check_trinity_setup(row, df_context=None) -> dict:
         return None
 
     # Logic 3: Momentum (RSI Healthy)
-    if not (35 <= rsi <= 65):
+    rsi_min = STRATEGY_PARAMS['TRINITY'].get('rsi_min', 35)
+    rsi_max = STRATEGY_PARAMS['TRINITY'].get('rsi_max', 65)
+    
+    if not (rsi_min <= rsi <= rsi_max):
         return None
 
     # --- DYNAMIC RISK MANAGEMENT ---
@@ -238,7 +242,8 @@ def check_trinity_setup(row, df_context=None) -> dict:
             "stop_loss": stop_loss,
             "take_profit": take_profit,
             "risk_reward": "1:2 (ATR Based)"
-        }
+        },
+        "side": "LONG"
     }
 
 def check_2b_setup(row, df_context=None) -> dict:
@@ -351,7 +356,8 @@ def check_2b_setup(row, df_context=None) -> dict:
             "stop_loss": round(sl_price, 2),
             "take_profit": round(tp_price, 2),
             "risk_reward": "1:3 (Fixed)"
-        }
+        },
+        "side": "SHORT" if "Bearish" in signal_type else "LONG"
     }
 
 def check_panic_setup(row, df_context=None) -> dict:
@@ -371,8 +377,9 @@ def check_panic_setup(row, df_context=None) -> dict:
     if price >= bbl:
         return None
 
-    # Logic 2: Extreme Fear (RSI < 30)
-    if rsi >= 30:
+    # Logic 2: Extreme Fear (Configurable)
+    rsi_threshold = STRATEGY_PARAMS['PANIC'].get('rsi_oversold', 30)
+    if rsi >= rsi_threshold:
         return None
 
     # Logic 3: Capitulation Volume (RVOL > 1.2)
@@ -406,5 +413,6 @@ def check_panic_setup(row, df_context=None) -> dict:
             "stop_loss": stop_loss,
             "take_profit": take_profit,
             "risk_reward": "1:3 (ATR Based)"
-        }
+        },
+        "side": "LONG"
     }

@@ -11,27 +11,14 @@ from core.indicators import calculate_indicators, check_trinity_setup, check_pan
 from core.news import get_market_news
 from core.llm_client import GeminiClient
 from core.notifier import send_telegram_report
+from core.notifier import send_telegram_report
+from backtest import Backtester
+from core.cache_manager import BacktestCache
 
 # Load Env
 load_dotenv()
 
-def fetch_data(ticker):
-    try:
-        df = yf.download(ticker, period="1y", interval="1d", progress=False)
-        if df.empty:
-            return None
-        # Flatten MultiIndex if present (yfinance update fix)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        # Deduplicate columns (fix for yfinance/threading issue returning doubled columns)
-        if not df.columns.is_unique:
-            df = df.loc[:, ~df.columns.duplicated()]
-        
-        return df
-    except Exception as e:
-        print(f"Error fetching {ticker}: {e}")
-        return None
+from core.data_fetcher import fetch_data
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -104,12 +91,24 @@ def scan_market(tickers):
 
     return candidates
 
+import argparse
+
 def main():
+    parser = argparse.ArgumentParser(description="OpenClaw Real-Time Scanner")
+    parser.add_argument('--ticker', type=str, help='Specific ticker to scan (overrides mode)')
+    parser.add_argument('--mode', type=str, choices=['US', 'CRYPTO', 'ALL'], help='Asset class to scan')
+    
+    args = parser.parse_args()
+
     # 1. Configuration
-    mode = os.getenv("SCAN_MODE", "ALL").upper()
+    # CLI arg > Env Var > Default
+    mode = args.mode if args.mode else os.getenv("SCAN_MODE", "ALL").upper()
+    
     target_tickers = []
     
-    if mode == "US":
+    if args.ticker:
+        target_tickers = [args.ticker]
+    elif mode == "US":
         target_tickers = US_STOCKS
     elif mode == "CRYPTO":
         target_tickers = CRYPTO_ASSETS
@@ -151,6 +150,32 @@ def main():
         
         data_summary += f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | Confidence: {c['confidence']} | {metric_str}\n"
         data_summary += f"  - Backtest: {backtest_str}\n"
+        
+        # --- NEW: Regression Simulation (3y) ---
+        print(f"🔄 Running Regression Sim for {c['ticker']}...")
+        
+        # 1. Check Cache
+        cache = BacktestCache()
+        sim_stats = cache.get(c['ticker'], "3y")
+        
+        from_cache = False
+        if sim_stats:
+            print(f"⚡ Cache Hit for {c['ticker']}")
+            from_cache = True
+        else:
+            # 2. Run Backtest
+            bt = Backtester([c['ticker']], period="3y")
+            bt.load_data()
+            bt.run(min_confidence=60) # Loose filter
+            sim_stats = bt.get_summary_metrics()
+            # 3. Save Cache
+            cache.set(c['ticker'], "3y", sim_stats)
+        
+        sim_str = f"ROI: {sim_stats['roi']}% | WR: {sim_stats['wr']}% | Trades: {sim_stats['trades']} | PnL: ${sim_stats['pnl']}"
+        if from_cache: sim_str += " (Cached)"
+        
+        data_summary += f"  - Simulation (Regression Test 3y): {sim_str}\n"
+        
         data_summary += f"  - Plan: {plan_str}\n"
         
         # Fetch News (Limit to prevent API bloat)
