@@ -31,21 +31,23 @@ def send_telegram_report(report_text):
         response = requests.post(url, json=payload, timeout=15)
         response.raise_for_status()
         print("✅ Report sent to Telegram.")
-    except Exception:
-        # 2. Markdown Failed? Try plain text
-        print("⚠️ Markdown failed. Retrying as plain text...")
-        payload["parse_mode"] = None
+    except Exception as e:
+        print(f"⚠️ Markdown send failed ({e}). Retrying as split plain text...")
         
-        # If text is too long, truncate it
-        if len(report_text) > 4000:
-             print("⚠️ Text too long. Truncating...")
-             payload["text"] = report_text[:4000] + "\n\n[Report Truncated]"
-             
-        try:
-            requests.post(url, json=payload, timeout=15).raise_for_status()
-            print("✅ Report sent (Plain Text fallback).")
-        except Exception as e2:
-            print(f"❌ Failed to send Telegram message: {e2}")
-            # Ensure user sees it in console if delivery completely fails
-            print("\n*** UNDELIVERED REPORT ***\n")
-            print(report_text)
+        # Split into chunks of 3000 chars to be safe
+        chunk_size = 3000
+        chunks = [report_text[i:i+chunk_size] for i in range(0, len(report_text), chunk_size)]
+        
+        for i, chunk in enumerate(chunks):
+            payload["parse_mode"] = None
+            payload["text"] = f"[{i+1}/{len(chunks)}] {chunk}" if len(chunks) > 1 else chunk
+            
+            try:
+                requests.post(url, json=payload, timeout=15).raise_for_status()
+                print(f"✅ Report chunk {i+1}/{len(chunks)} sent.")
+            except Exception as e2:
+                print(f"❌ Failed to send chunk {i+1}: {e2}")
+                # Ensure user sees it in console if delivery completely fails
+                if i == 0:
+                    print("\n*** UNDELIVERED REPORT ***\n")
+                    print(report_text)
