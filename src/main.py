@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 # Local Imports
 from config import US_STOCKS, CRYPTO_ASSETS, STRATEGY_PARAMS
-from core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup
+from core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup, check_2b_setup
 from core.news import get_market_news
 from core.llm_client import GeminiClient
 from core.notifier import send_telegram_report
@@ -48,6 +48,7 @@ def scan_market(tickers):
         # Pass the full DF for backtesting context
         trinity_result = check_trinity_setup(latest, df)
         panic_result = check_panic_setup(latest, df)
+        reversal_result = check_2b_setup(latest, df)
         
         if trinity_result:
             candidates.append({
@@ -62,6 +63,13 @@ def scan_market(tickers):
                 **panic_result
             })
             print(f"🚨 FOUND PANIC: {ticker}")
+
+        elif reversal_result:
+            candidates.append({
+                "ticker": ticker,
+                **reversal_result
+            })
+            print(f"🔄 FOUND 2B REVERSAL: {ticker}")
 
     return candidates
 
