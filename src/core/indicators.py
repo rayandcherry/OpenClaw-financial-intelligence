@@ -241,6 +241,119 @@ def check_trinity_setup(row, df_context=None) -> dict:
         }
     }
 
+def check_2b_setup(row, df_context=None) -> dict:
+    """
+    2B Reversal Strategy: 
+    1. Identify significant High/Low in past 20-60 days.
+    2. Check for False Breakout (2B).
+    3. Filter by Momentum (RSI Divergence/MACD).
+    4. Calculate SL/TP with 1:3 RR.
+    """
+    if df_context is None or df_context.empty:
+        return None
+    
+    idx = df_context.index.get_loc(row.name)
+    if idx < 60: return None # Need history
+    
+    price = row['Close']
+    rsi = row.get('RSI_14')
+    macd_hist = row.get('MACD_Hist')
+    
+    # Config (Hardcoded for now based on Plan, ideally from config.py passed down)
+    lookback_min = 20
+    lookback_max = 60
+    
+    # --- Step 1: Identify Key Levels (20-60 days ago excluding recent 5 days to avoid finding today as high) ---
+    # We look for a high/low that occurred between t-60 and t-5
+    past_window = df_context.iloc[idx-lookback_max : idx-5] 
+    
+    prev_high = past_window['High'].max()
+    prev_low = past_window['Low'].min()
+    
+    prev_high_idx = past_window['High'].idxmax()
+    prev_low_idx = past_window['Low'].idxmin()
+    
+    prev_high_rsi = df_context.loc[prev_high_idx, 'RSI_14']
+    prev_low_rsi = df_context.loc[prev_low_idx, 'RSI_14']
+    
+    # --- Step 2: Check for Breakout & Reversal (The 2B Pattern) ---
+    signal_type = None
+    key_level = 0.0
+    sl_price = 0.0
+    
+    # Bearish 2B: Price broke PrevHigh recently (today/yest) but Closed BELOW it today
+    # And High of today (or yesterday) was > PrevHigh
+    recent_high = df_context.iloc[idx-2:idx+1]['High'].max() # Last 3 days high
+    
+    if recent_high > prev_high and price < prev_high:
+        # Candidate for Bearish 2B
+        signal_type = "Bearish 2B"
+        key_level = prev_high
+        sl_price = recent_high * 1.005 # Just above the wick
+        
+        # Momentum Filter: RSI Divergence
+        # If Current RSI < RSI at PrevHigh, it's divergence
+        is_divergence = rsi < prev_high_rsi
+        
+    elif recent_high < prev_low: # Impossible, Logic check for Bullish
+        pass 
+        
+    # Bullish 2B: Price broke PrevLow recently but Closed ABOVE it
+    recent_low = df_context.iloc[idx-2:idx+1]['Low'].min()
+    
+    if recent_low < prev_low and price > prev_low:
+        signal_type = "Bullish 2B"
+        key_level = prev_low
+        sl_price = recent_low * 0.995 # Just below wick
+        
+        # Momentum Filter: RSI Divergence
+        # If Current RSI > RSI at PrevLow
+        is_divergence = rsi > prev_low_rsi
+        
+    if not signal_type:
+        return None
+        
+    # --- Step 3: Momentum & Rating ---
+    # Filter: Must have divergence OR shrinking MACD histogram
+    prev_hist = df_context.iloc[idx-1]['MACD_Hist']
+    is_macd_shrinking = abs(macd_hist) < abs(prev_hist)
+    
+    if not (is_divergence or is_macd_shrinking):
+        return None # Failed momentum check (Strong breakout likely)
+        
+    rating = "High" if (is_divergence and is_macd_shrinking) else "Medium"
+    
+    # --- Step 4: Risk Calc ---
+    risk_pct = abs(price - sl_price) / price
+    if risk_pct > 0.05:
+        rating = "Low (Wide Stop)"
+        # Adjust size logic or just flag it
+        
+    tp_price = price - (abs(price - sl_price) * 3) if "Bearish" in signal_type else price + (abs(price - sl_price) * 3)
+    
+    # --- Backtest (Optional, reusing regime logic if applicable or skip for MVP) ---
+    # For now, skip bespoke backtest integration for 2B to keep scope small, 
+    # relying on the independent test in Spec.
+    
+    return {
+        "strategy": "2B_Reversal",
+        "price": price,
+        "confidence": 85 if rating == "High" else 65,
+        "metrics": {
+            "type": signal_type,
+            "key_level": f"${key_level:.2f}",
+            "rsi_div": str(is_divergence),
+            "macd_weak": str(is_macd_shrinking),
+            "rating": rating
+        },
+        "stats": {"warning": "New Strategy - Low Sample Size"},
+        "plan": {
+            "stop_loss": round(sl_price, 2),
+            "take_profit": round(tp_price, 2),
+            "risk_reward": "1:3 (Fixed)"
+        }
+    }
+
 def check_panic_setup(row, df_context=None) -> dict:
     """
     Panic Strategy (Updated): Mean Reversion + ATR Targets + Backtest.

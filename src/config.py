@@ -29,5 +29,11 @@ STRATEGY_PARAMS = {
         "bb_std": 2.0,
         "rsi_period": 14,
         "rsi_oversold": 30   # Deep value / panic threshold
+    },
+    "2B": {
+        "lookback_min": 20,
+        "lookback_max": 60,
+        "rsi_period": 14,
+        "sl_limit_pct": 0.05
     }
 }
