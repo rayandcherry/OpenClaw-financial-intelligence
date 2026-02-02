@@ -1,152 +1,92 @@
 # OpenClaw Financial Intelligence 🦞
 
-**OpenClaw** is a stateless, AI-driven financial intelligence unit designed to scan US Equities and Crypto markets for specific high-probability setups, sanitize the data, and deliver actionable reports via Telegram.
+**OpenClaw** is a comprehensive, AI-driven financial intelligence system designed to **Scan**, **Verify**, and **Track** high-probability trading setups in US Equities and Cryptocurrencies.
 
-## 🚀 Features
+It combines technical analysis algorithms, historical backtesting, and LLM-based intelligence to deliver actionable signals, and provides a dedicated tracker to manage risk during execution.
 
-*   **Multi-Asset Scanning:** Covers US Blue Chips (S&P 500 leaders) and Top 20 Cryptocurrencies.
-*   **Multi-Strategy Logic:**
-    *   🛡️ **Trinity:** Trend continuation strategy (Pullback to EMA50 in an SMA200 uptrend).
-    *   🔥 **Panic:** Mean reversion strategy (Oversold RSI < 30 + Below Bollinger Bands).
-    *   🔄 **2B Reversal:** Potential bottom/top reversal setup.
-*   **AI Analyst:** Uses Google Gemini (via `google-generativeai`) to synthesize technical data with recent news.
-*   **News Filter:** Integrates DuckDuckGo to check for fundamental red flags before reporting.
-*   **Zero-Trust Security:** No hardcoded keys. All configuration via `.env`.
+## 🚀 Key Features
 
-## 💡 Design Philosophy
+### 1. Intelligent Scanning (`src/main.py`)
+*   **Multi-Asset:** Covers US Blue Chips and Top 20 Cryptocurrencies.
+*   **Strategies:**
+    *   🛡️ **Trinity:** Trend following (Pullback to EMA50 in Uptrend).
+    *   🔥 **Panic:** Mean reversion (Oversold RSI < 30 + Below Bollinger Bands).
+    *   🔄 **2B Reversal:** Swing failure patterns.
+*   **AI Context:** Uses **Google Gemini** to synthesize technicals with recent news (DuckDuckGo).
+*   **Regression Testing:** Automatically runs a 3-year backtest on every candidate to verify historical win rates before reporting.
 
-*   **Efficient Funnel Architecture:** Uses `ThreadPoolExecutor` to concurrently scan huge lists of assets. Only valid candidates trigger expensive operations (News API & LLM), ensuring maximum cost-efficiency.
-*   **High Modularity:** strict separation of concerns (Data, Analysis, Intelligence, Notification) allows for easy component swapping.
-*   **Fault Tolerance:** Built-in fallback mechanisms ensure reports are generated even if the LLM provider experiences downtime.
+### 2. Paper Trading Engine (`src/simulate.py`)
+*   **Time Machine:** Simulates strategies over past 3 years.
+*   **Optimization:** Configurable parameter tuning.
+*   **Realistic:** Accounts for fractional shares, spread, and short selling.
+
+### 3. Trade Tracker (`src/track.py`)
+*   **Risk Management:** Calculates position size using **Kelly Criterion** & **VaR** (Value at Risk).
+*   **Dynamic Exits:** Implements **ATR Trailing Stops** to lock in profits.
+*   **Ladder Logic:** Automatically suggests scaling out (sell 50%) at TP1.
+*   **Tax Estimation:** Estimates tax reserves for short-term gains.
 
 ## 🛠️ Installation
 
-1.  **Clone the repository:**
+1.  **Clone & Install**:
     ```bash
-    git clone https://github.com/YOUR_USERNAME/OpenClaw-financial-intelligence.git
-    cd OpenClaw-financial-intelligence
-    ```
-
-2.  **Install dependencies:**
-    ```bash
+    git clone https://github.com/YOUR_USERNAME/OpenClaw.git
+    cd OpenClaw
     pip install -r requirements.txt
     ```
 
-3.  **Configuration:**
-    Copy the example environment file:
+2.  **Configuration**:
+    Copy `.env.example` to `.env` and set your keys:
     ```bash
-    cp .env.example .env
+    GEMINI_API_KEY=...
+    TELEGRAM_TOKEN=...
+    SCAN_MODE=ALL  # US, CRYPTO, or ALL
     ```
-    Edit `.env` and add your keys:
-    *   `GEMINI_API_KEY`: Required for report generation.
-    *   `TELEGRAM_TOKEN` & `TELEGRAM_CHAT_ID`: Required for delivery.
-    *   `SCAN_MODE`: Set to `US`, `CRYPTO`, or `ALL`.
-    *   `REPORT_LANG`: Set to `EN` or `ZH` (Traditional Chinese).
 
-## 🏃 Usage
+## 🏃 Usage Guide
 
-Run the main orchestrator:
-
+### Mode A: Market Scanner (Discover)
+Run the daily scanner to find opportunities:
 ```bash
 python src/main.py
 ```
+*   *Output:* Telegram report with AI insights + Historical Win Rate.
 
-The system will:
-1.  Download market data using `yfinance`.
-2.  Calculate indicators using `pandas_ta`.
-3.  Filter for **Trinity** or **Panic** signals.
-4.  Fetch context news.
-5.  Generate a report via LLM.
-6.  Send it to Telegram.
+---
+
+### Mode B: Simulation (Verify)
+Want to test a strategy on a specific ticker?
+```bash
+python src/simulate.py --ticker BTC-USD --period 3y
+```
+*   *Output:* Detailed backtest report including Max Drawdown and Win Rate.
+
+---
+
+### Mode C: Trade Tracker (Manage)
+Manage your active positions with professional risk rules.
+
+1.  **Size Your Trade**:
+    ```bash
+    # "I want to buy BTC at 65k, SL at 63k. Winrate is 60%."
+    python src/track.py size BTC-USD 65000 63000 --winrate 60
+    ```
+    *   *Result:* "Buy 0.3 BTC (Kelly Criterion)"
+
+2.  **Start Tracking**:
+    ```bash
+    python src/track.py add BTC-USD 65000 0.3 --side LONG --tp1 68000
+    ```
+
+3.  **Monitor (Hourly/Daily)**:
+    ```bash
+    python src/track.py monitor
+    ```
+    *   *Result:* Updates Trailing Stop, checks TP1, alerts if Exit needed.
 
 ## 🏗️ Architecture
 
-### Component Structure
-
-```mermaid
-graph TD
-    classDef config fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef core fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef ext fill:#dfd,stroke:#333,stroke-width:2px;
-
-    Entry[src/main.py]:::core
-    Config[src/config.py]:::config
-    Env[.env]:::config
-    
-    subgraph Core Modules
-        Indicators[core/indicators.py]:::core
-        News[core/news.py]:::core
-        LLM[core/llm_client.py]:::core
-        Notifier[core/notifier.py]:::core
-    end
-
-    subgraph External APIs
-        YF[Yahoo Finance]:::ext
-        DDG[DuckDuckGo]:::ext
-        Gemini[Google Gemini]:::ext
-        TG[Telegram]:::ext
-    end
-
-    Entry -->|Load Settings| Config
-    Entry -->|Load Secrets| Env
-    Config -->|Define Tickers| Entry
-
-    Entry -->|Concurrently Fetch| YF
-    Entry -->|Calculate| Indicators
-    
-    Entry -->|Fetch Context| News
-    News -->|Search| DDG
-    
-    Entry -->|Generate Report| LLM
-    LLM -->|API Call| Gemini
-    
-    Entry -->|Send| Notifier
-    Notifier -->|Push| TG
-```
-
-### Execution Flow (Multi-threaded)
-
-```mermaid
-sequenceDiagram
-    participant Main as src/main.py
-    participant Pool as ThreadPoolExecutor
-    participant Worker as process_ticker()
-    participant YF as yfinance
-    participant Ind as indicators.py
-
-    Main->>Pool: Submit Tasks (Tickers)
-    activate Pool
-    
-    par Parallel Execution
-        Pool->>Worker: Ticker A
-        Worker->>YF: Download Data
-        YF-->>Worker: DataFrame
-        Worker->>Ind: Calculate Indicators
-        Worker->>Ind: Check Strategies (Trinity/Panic/2B)
-        Worker-->>Pool: Result (Candidate/None)
-    and
-        Pool->>Worker: Ticker B
-        Worker->>YF: Download Data
-        YF-->>Worker: DataFrame
-        Worker->>Ind: Calculate Indicators
-        Worker-->>Pool: Result (Candidate/None)
-    end
-    
-    deactivate Pool
-    Pool-->>Main: List[Candidates]
-
-    Main->>Main: Fetch News & Generate Report
-```
+See [Architecture V3](.gemini/antigravity/brain/5a78b976-c2a8-4426-a60a-83a838a79bea/architecture_v2.md) for detailed diagrams.
 
 ## ⚠️ Disclaimer
-
-**OpenClaw is an experimental research tool.** 
-
-*   This software is **not** financial advice.
-*   Trading cryptocurrencies and stocks involves significant risk.
-*   The "Panic" strategy specifically targets falling assets (knife catching) and carries extreme risk of loss.
-*   Use at your own risk.
-
-## 📜 License
-
-MIT License
+**OpenClaw is a research tool.** Not financial advice. Trading involves risk of loss.
