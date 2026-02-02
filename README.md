@@ -102,9 +102,9 @@ graph TD
     classDef ext fill:#dfd,stroke:#333,stroke-width:2px;
 
     %% Entry Points
-    EntryMain[src/main.py\n(Scanner)]:::core
-    EntrySim[src/simulate.py\n(Simulation)]:::core
-    EntryTrack[src/track.py\n(Tracker CLI)]:::tracker
+    EntryMain["src/main.py\n(Scanner)"]:::core
+    EntrySim["src/simulate.py\n(Simulation)"]:::core
+    EntryTrack["src/track.py\n(Tracker CLI)"]:::tracker
 
     %% Configuration
     Config[src/config.py]:::config
@@ -114,7 +114,7 @@ graph TD
     subgraph Core Shared
         Indicators[core/indicators.py]:::core
         DataFetch[core/data_fetcher.py]:::core
-        Cache[core/cache_manager.py\n(Backtest Cache)]:::core
+        Cache["core/cache_manager.py\n(Backtest Cache)"]:::core
         News[core/news.py]:::core
         LLM[core/llm_client.py]:::core
         Notifier[core/notifier.py]:::core
@@ -128,8 +128,8 @@ graph TD
 
     subgraph Trade Tracker
         TrackerService[tracker/service.py]:::tracker
-        PosMgr[tracker/position.py\n(Dynamic Exits)]:::tracker
-        RiskMgr[tracker/risk.py\n(Kelly/VaR)]:::tracker
+        PosMgr["tracker/position.py\n(Dynamic Exits)"]:::tracker
+        RiskMgr["tracker/risk.py\n(Kelly/VaR)"]:::tracker
         StateDB[(data/positions.json)]:::tracker
     end
 
