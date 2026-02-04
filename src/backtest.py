@@ -3,27 +3,56 @@ import numpy as np
 from datetime import datetime
 from core.data_fetcher import fetch_data
 from core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup, check_2b_setup
+try:
+    from tracker.position import PositionManager
+except ImportError:
+    from src.tracker.position import PositionManager
 
 class Portfolio:
     def __init__(self, initial_balance=100000):
         self.initial_balance = initial_balance
         self.cash = initial_balance
-        self.positions = {} # {ticker: {'qty': 0, 'entry_price': 0, 'sl': 0, 'tp': 0}}
+        self.positions = {} # {ticker: PositionManager}
         self.history = []
         self.equity_curve = []
 
     def current_equity(self, current_prices):
         equity = self.cash
         for ticker, pos in self.positions.items():
-            current_price = current_prices.get(ticker, pos['entry_price'])
-            equity += pos['qty'] * current_price
+            current_price = current_prices.get(ticker, pos.entry_price)
+            # Use PositionManager's internal PnL calculation if needed, 
+            # but simple MV is fine here:
+            if pos.side == 'LONG':
+                equity += pos.qty * current_price
+            else:
+                # SHORT Equity = Cash + (Entry - Current) * Qty + CostBasis
+                # Simplified: Equity = Cash + Unrealized PnL + Cost Basis
+                # But Cash already has margin reserved logic? 
+                # Let's stick to: Equity = Cash + Market Value of Positions
+                # For Short: Market Value is effectively specific to how we model margin.
+                # Simple PnL approach:
+                pnl = (pos.entry_price - current_price) * pos.qty
+                # We need to explicitly know cost basis if we want total account value
+                # Assuming 'cash' holds everything except the 'margin' used?
+                # Let's use the simple PnL add-back:
+                # Equity = (Cash + CostOfPos) + PnL
+                # But we deducted Cost from Cash in open_position.
+                # So Equity = Cash + Cost + PnL
+                equity += (pos.entry_price * pos.qty) + pnl
         return equity
 
-    def calculate_size(self, price, stop_loss, confidence, current_equity):
+    def calculate_size(self, price, stop_loss, confidence, current_equity, risk_params=None):
         if price <= 0: return 0
         
-        # 1. Risk Management: Risk 2% of Current Equity per trade
-        risk_per_trade = current_equity * 0.02
+        # 1. Risk Management: Default 2%, or injected
+        base_risk_pct = 0.02
+        max_alloc_pct = 0.10
+        
+        if risk_params:
+            base_risk_pct = risk_params.get('risk_per_trade', 0.02)
+            max_alloc_pct = risk_params.get('max_position_size', 0.10)
+            
+        risk_per_trade = current_equity * base_risk_pct
         
         # Risk per share
         risk_per_share = abs(price - stop_loss)
@@ -37,76 +66,76 @@ class Portfolio:
         multiplier = confidence / 50.0
         final_qty = base_qty * multiplier
         
-        # 3. Max Allocation Rule (Max 10% of equity per position)
-        max_cost = current_equity * 0.10
+        # 3. Max Allocation Rule
+        max_cost = current_equity * max_alloc_pct
         if (final_qty * price) > max_cost:
             final_qty = max_cost / price
             
         return max(0.0, final_qty)
 
-    def open_position(self, ticker, price, qty, sl, tp, strategy, date, side="LONG"):
+    def open_position(self, ticker, price, qty, sl, tp, strategy, date, side="LONG", atr=None, risk_params=None):
         cost = price * qty
         if self.cash < cost:
             return False # Insufficient funds
             
         self.cash -= cost
-        self.positions[ticker] = {
-            'qty': qty,
-            'entry_price': price,
-            'sl': sl,
-            'tp': tp,
-            'tp': tp,
-            'strategy': strategy,
-            'entry_date': date,
-            'side': side
-        }
+        
+        # Instantiate PositionManager
+        pos = PositionManager(ticker, price, qty, side, atr_at_entry=atr, tp1=tp, risk_params=risk_params)
+        # Store metadata that PositionManager doesn't care about but Backtester does
+        pos.strategy = strategy
+        pos.entry_date = date
+        
+        self.positions[ticker] = pos
         return True
 
-    def close_position(self, ticker, price, date, reason="signal"):
+    def close_position(self, ticker, price, date, reason="signal", qty_to_close=None):
         if ticker not in self.positions:
             return
         
         pos = self.positions[ticker]
-        side = pos.get('side', 'LONG')
         
-        revenue = price * pos['qty']
+        # Determine quantity to close (Ladder exit support)
+        qty = qty_to_close if qty_to_close else pos.qty
         
-        if side == 'LONG':
-             profit = revenue - (pos['entry_price'] * pos['qty'])
-             pct_gain = (price - pos['entry_price']) / pos['entry_price']
+        # Revenue logic
+        if pos.side == 'LONG':
+             revenue = price * qty
+             profit = (price - pos.entry_price) * qty
+             pct_gain = (price - pos.entry_price) / pos.entry_price
              self.cash += revenue
         else: # SHORT
-             # Revenue logic: we sold entry, buy back exit. 
-             # Profit = (Entry - Exit) * Qty
-             entry_val = pos['entry_price'] * pos['qty']
-             exit_val = price * pos['qty']
-             profit = entry_val - exit_val
-             pct_gain = (pos['entry_price'] - price) / pos['entry_price']
+             # PnL = (Entry - Exit) * Qty
+             profit = (pos.entry_price - price) * qty
+             pct_gain = (pos.entry_price - price) / pos.entry_price
              
-             # Cash effect: We received cash at entry (theoretically), paid at exit.
-             # Simplified Spot Sim: We reserved cash as collateral. Return collateral + profit.
-             cost = pos['entry_price'] * pos['qty']
-             self.cash += cost + profit
+             # Return Collateral (Entry * Qty) + Profit
+             cost_basis = pos.entry_price * qty
+             self.cash += cost_basis + profit
         
-        # Calculate Duration
-        duration = (date - pos['entry_date']).days
+        # Update Position Object
+        pos.qty -= qty
         
+        # Log History
+        duration = (date - pos.entry_date).days
         self.history.append({
             'ticker': ticker,
-            'strategy': pos['strategy'],
-            'side': side,
-            'entry_date': pos['entry_date'],
+            'strategy': pos.strategy,
+            'side': pos.side,
+            'entry_date': pos.entry_date,
             'exit_date': date,
             'duration_days': duration,
-            'entry_price': pos['entry_price'],
+            'entry_price': pos.entry_price,
             'exit_price': price,
-            'qty': pos['qty'],
+            'qty': qty,
             'profit': profit,
             'pct_gain': pct_gain,
             'reason': reason
         })
         
-        del self.positions[ticker]
+        # If fully closed, remove
+        if pos.qty <= 0:
+            del self.positions[ticker]
 
 class Backtester:
     def __init__(self, tickers, period="3y"):
@@ -125,7 +154,13 @@ class Backtester:
             else:
                 print(f"Warning: No data for {t}")
 
-    def run(self, min_confidence=70):
+    def run(self, min_confidence=70, strategies=None, strategy_params=None, risk_params=None):
+        # Default to ALL strategies if None
+        if strategies is None:
+            strategies = ["TRINITY", "PANIC", "2B"]
+        else:
+            strategies = [s.upper() for s in strategies]
+            
         # 1. Align Dates (Find common date range or just union)
         # We need to iterate day by day to simulate realistic portfolio state
         all_dates = set()
@@ -141,11 +176,7 @@ class Backtester:
             current_prices = {}
             
             # --- A. Check Exits (Stop Loss / Take Profit) ---
-            # We use 'Low' for SL and 'High' for TP triggers on the current day bar
-            # Assumption: Order executes if price passes through level.
-            # Conservative: Hit SL first, then TP (pessimistic).
-            
-            # Create a list to modify dict while iterating
+            # ... (Exit logic remains unchanged)
             active_tickers = list(self.portfolio.positions.keys())
             
             for ticker in active_tickers:
@@ -158,44 +189,31 @@ class Backtester:
                 
                 current_prices[ticker] = row['Close']
                 
-                side = pos.get('side', 'LONG')
+                # --- CHECK EXITS (Dynamic via PositionManager) ---
+                current_atr = row.get('ATR_14', 0)
                 
-                # --- CHECK EXITS ---
-                # LONG Logic
-                if side == 'LONG':
-                    # Check SL (Low touches SL)
-                    if row['Low'] <= pos['sl']:
-                        exit_price = pos['sl']
-                        # Gap Down
-                        if row['Open'] < pos['sl']: exit_price = row['Open']
-                        self.portfolio.close_position(ticker, exit_price, current_date, reason="Stop Loss")
-                        continue
-                        
-                    # Check TP (High touches TP)
-                    if row['High'] >= pos['tp']:
-                        exit_price = pos['tp']
-                        # Gap Up
-                        if row['Open'] > pos['tp']: exit_price = row['Open']
-                        self.portfolio.close_position(ticker, exit_price, current_date, reason="Take Profit")
-                        continue
-                        
-                # SHORT Logic
+                sl_hit_price = None
+                if pos.side == 'LONG':
+                    if row['Low'] <= pos.current_sl:
+                        sl_hit_price = pos.current_sl
+                        if row['Open'] < pos.current_sl: sl_hit_price = row['Open']
                 else:
-                    # Check SL (High touches SL - Price went UP)
-                    if row['High'] >= pos['sl']:
-                        exit_price = pos['sl']
-                        # Gap Up
-                        if row['Open'] > pos['sl']: exit_price = row['Open']
-                        self.portfolio.close_position(ticker, exit_price, current_date, reason="Stop Loss")
-                        continue
-                        
-                    # Check TP (Low touches TP - Price went DOWN)
-                    if row['Low'] <= pos['tp']:
-                        exit_price = pos['tp']
-                        # Gap Down
-                        if row['Open'] < pos['tp']: exit_price = row['Open']
-                        self.portfolio.close_position(ticker, exit_price, current_date, reason="Take Profit")
-                        continue
+                    if row['High'] >= pos.current_sl:
+                        sl_hit_price = pos.current_sl
+                        if row['Open'] > pos.current_sl: sl_hit_price = row['Open']
+
+                if sl_hit_price:
+                     self.portfolio.close_position(ticker, sl_hit_price, current_date, reason="Stop Loss (Dynamic)")
+                     continue
+
+                trail_price = row['High'] if pos.side == 'LONG' else row['Low']
+                res = pos.update(trail_price, current_atr) # PositionManager uses internal injected params if updated
+                
+                if res['action']:
+                    if "SELL_HALF" in res['action']:
+                        if not pos.tp1_hit:
+                             exit_px = pos.tp1
+                             self.portfolio.close_position(ticker, exit_px, current_date, reason="Take Profit 1 (Ladder)", qty_to_close=pos.qty * 0.5)
             
             # --- B. Check Entries (Signals) ---
             for ticker in self.tickers:
@@ -205,48 +223,32 @@ class Backtester:
                 df = self.data_store.get(ticker)
                 if df is None or current_date not in df.index:
                     continue
-                    
-                # PREVENT LOOKAHEAD BIAS:
-                # pass only data UP TO current_date
-                # Assuming df is sorted index.
-                # However, df.loc[:current_date] usually includes current_date.
-                # Strategies typically assume we are making decision at Close of candle,
-                # or based on indicators final value of that day.
-                # If we trade "Next Open", we gen signal today, trade tomorrow.
-                # If we trade "Close", we gen signal now.
-                # Let's assume we can execute at 'Close' price if signal matches.
-                
-                # Context Slicing (Optimization: Don't slice full DF every time if not needed by all strats)
-                # But our strats checks need 'df_context'.
-                # To be fast, we might just pass full DF and ensure strats don't peek?
-                # The strategies I wrote earlier use `df_context` for `backtest_regime_performance` 
-                # which uses .iloc[idx+1:idx+21]. THIS IS BAD if passed full DF.
-                
-                # For this MVP simulation, we must strictly pass history.
-                # Slicing df.loc[:current_date] is safest.
                 
                 df_context = df.loc[:current_date]
                 row = df.loc[current_date]
                 
-                # Basic Filters to save time
-                if row['Close'] < 5: continue # Skip penny stocks
+                if row['Close'] < 5: continue 
                 
-                # Check Strategies
                 scan_res = None
                 
                 # 1. Trinity
-                trinity = check_trinity_setup(row, df_context)
-                if trinity: scan_res = trinity
+                if "TRINITY" in strategies:
+                    # Pass injected params if available
+                    t_params = strategy_params.get('TRINITY') if strategy_params else None
+                    trinity = check_trinity_setup(row, df_context, params=t_params)
+                    if trinity: scan_res = trinity
                 
                 # 2. Panic
-                if not scan_res:
-                    panic = check_panic_setup(row, df_context)
+                if not scan_res and "PANIC" in strategies:
+                    p_params = strategy_params.get('PANIC') if strategy_params else None
+                    panic = check_panic_setup(row, df_context, params=p_params)
                     if panic: scan_res = panic
                 
                 # 3. 2B
-                if not scan_res:
+                if not scan_res and "2B" in strategies:
                     _2b = check_2b_setup(row, df_context)
                     if _2b: scan_res = _2b
+
                     
                 # Execute Entry
                 if scan_res:
@@ -262,13 +264,21 @@ class Backtester:
                     # Updates current equity for sizing
                     curr_eq = self.portfolio.current_equity(current_prices)
                     
-                    qty = self.portfolio.calculate_size(price, sl, confidence, curr_eq)
+                    qty = self.portfolio.calculate_size(price, sl, confidence, curr_eq, risk_params=risk_params)
                     
                     if qty > 0:
+                        atr = row.get('ATR_14', price * 0.05)
+                        
+                        # INJECT RISK PARAMS into PositionManager init via Portfolio proxy if needed
+                        # But Portfolio.open_position instantiates PositionManager.
+                        # We need to pass risk_params to Portfolio.open_position
+                        
                         success = self.portfolio.open_position(
                             ticker, price, qty, sl, tp, 
                             scan_res['strategy'], current_date,
-                            side=scan_res.get('side', 'LONG')
+                            side=scan_res.get('side', 'LONG'),
+                            atr=atr,
+                            risk_params=risk_params
                         )
                         if success:
                             # print(f"[{current_date.date()}] Bought {ticker} ({scan_res['strategy']}) @ {price} | Qty: {qty}")

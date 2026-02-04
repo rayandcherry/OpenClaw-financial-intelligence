@@ -39,7 +39,8 @@ def send_telegram_report(report_text):
         chunks = [report_text[i:i+chunk_size] for i in range(0, len(report_text), chunk_size)]
         
         for i, chunk in enumerate(chunks):
-            payload["parse_mode"] = None
+            if "parse_mode" in payload:
+                del payload["parse_mode"]
             payload["text"] = f"[{i+1}/{len(chunks)}] {chunk}" if len(chunks) > 1 else chunk
             
             try:

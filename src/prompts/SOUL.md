@@ -32,14 +32,17 @@ For each asset, explain the technical logic and Analyze the **Regime-Based Backt
 ### 2. Signal Analysis
 
 **[Ticker Symbol]** (Confidence: [Score]/100)
-*   **Strategy:** [Trinity / Panic]
+*   **Strategy:** [Trinity / Panic / 2B]
 *   **Data:** Price: $X | RSI: Y | Vol: Z | Regime: [Bull/Bear/Sideways]
+    *(Ensure these numbers MATCH the input data exactly. Do not hallucinate or copy from other assets.)*
 *   **Logic (Analysis):**
     *   Explain *why* this signal triggered.
     *   **Backtest Analysis:** 
         *   "This strategy has a historical win rate of [Total WR]%."
         *   "In the current [Regime] environment, it historically performs [better/worse] with a WR of [Regime WR]%."
         *   IF A WARNING EXISTS: **🚨 STRATEGY FAILURE WARNING:** [Warning Text]. (Advise extreme caution or skipping).
+*   **Regression Sim (3y):**
+    *   ROI: [ROI]% | Win Rate: [WR]% | Net PnL: $[PnL]
 *   **Risk/News:** Mention any relevant fundamental news provided.
 *   **Plan:**
     *   TP: $X

@@ -182,10 +182,15 @@ def backtest_regime_performance(df, strategy_type):
 
     return stats
 
-def check_trinity_setup(row, df_context=None) -> dict:
+def check_trinity_setup(row, df_context=None, params=None) -> dict:
     """
     Trinity Strategy (Updated): Trend Pullback + ATR Risk + Backtest.
     """
+    # Load Params (Injection or Default)
+    # If params is provided (from Optimizer), it should be a dict like {"rsi_min": 30, ...}
+    # Otherwise use global STRATEGY_PARAMS['TRINITY']
+    config = params if params else STRATEGY_PARAMS['TRINITY']
+
     price = row['Close']
     sma200 = row.get('SMA_200')
     ema50 = row.get('EMA_50')
@@ -207,8 +212,8 @@ def check_trinity_setup(row, df_context=None) -> dict:
         return None
 
     # Logic 3: Momentum (RSI Healthy)
-    rsi_min = STRATEGY_PARAMS['TRINITY'].get('rsi_min', 35)
-    rsi_max = STRATEGY_PARAMS['TRINITY'].get('rsi_max', 65)
+    rsi_min = config.get('rsi_min', 35)
+    rsi_max = config.get('rsi_max', 65)
     
     if not (rsi_min <= rsi <= rsi_max):
         return None
@@ -220,7 +225,17 @@ def check_trinity_setup(row, df_context=None) -> dict:
     take_profit = round(price + (risk * 2), 2)
 
     # --- REGIME BACKTEST ---
-    stats = backtest_regime_performance(df_context, 'trinity') if df_context is not None else {}
+    # Ensure stats structure is always returned even if df_context is None
+    default_stats = {
+        "total": {"wr": 0, "count": 0},
+        "bull": {"wr": 0, "count": 0},
+        "bear": {"wr": 0, "count": 0},
+        "sideways": {"wr": 0, "count": 0},
+        "recent_decay": False,
+        "warning": None
+    }
+    
+    stats = backtest_regime_performance(df_context, 'trinity') if df_context is not None else default_stats
     
     # Confidence Score Calc
     confidence = 80 # Base
@@ -351,7 +366,14 @@ def check_2b_setup(row, df_context=None) -> dict:
             "macd_weak": str(is_macd_shrinking),
             "rating": rating
         },
-        "stats": {"warning": "New Strategy - Low Sample Size"},
+        "stats": {
+            "total": {"wr": 0, "count": 0},
+            "bull": {"wr": 0, "count": 0},
+            "bear": {"wr": 0, "count": 0},
+            "sideways": {"wr": 0, "count": 0},
+            "recent_decay": False,
+            "warning": "New Strategy - Low Sample Size"
+        },
         "plan": {
             "stop_loss": round(sl_price, 2),
             "take_profit": round(tp_price, 2),
@@ -360,10 +382,12 @@ def check_2b_setup(row, df_context=None) -> dict:
         "side": "SHORT" if "Bearish" in signal_type else "LONG"
     }
 
-def check_panic_setup(row, df_context=None) -> dict:
+def check_panic_setup(row, df_context=None, params=None) -> dict:
     """
     Panic Strategy (Updated): Mean Reversion + ATR Targets + Backtest.
     """
+    config = params if params else STRATEGY_PARAMS['PANIC']
+    
     price = row['Close']
     bbl = row.get('BBL_20_2.0')
     rsi = row.get('RSI_14')
@@ -378,7 +402,7 @@ def check_panic_setup(row, df_context=None) -> dict:
         return None
 
     # Logic 2: Extreme Fear (Configurable)
-    rsi_threshold = STRATEGY_PARAMS['PANIC'].get('rsi_oversold', 30)
+    rsi_threshold = config.get('rsi_oversold', 30)
     if rsi >= rsi_threshold:
         return None
 

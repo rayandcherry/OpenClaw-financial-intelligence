@@ -47,6 +47,7 @@ def main():
             print(json.dumps({"status": "ok", "candidates": []}))
         else:
             print("No candidates found matching strategies.")
+            send_telegram_report(f"📉 **OpenClaw Scan ({mode})**\n\nNo signal found matching strategies.")
         return
 
     # 3. Context & Enrichment
@@ -59,16 +60,20 @@ def main():
         metric_str = ", ".join([f"{k}={v}" for k, v in c['metrics'].items()])
         plan_str = f"SL=${c['plan']['stop_loss']}, TP=${c['plan']['take_profit']} ({c['plan']['risk_reward']})"
         
-        # Format Backtest Data
-        stats = c['stats']
+        # Format Backtest Data (Handle potential missing keys gracefully)
+        stats = c.get('stats', {})
+        total_wr = stats.get('total', {}).get('wr', 0)
+        bull_wr = stats.get('bull', {}).get('wr', 0)
+        bear_wr = stats.get('bear', {}).get('wr', 0)
+        
         backtest_str = (
-            f"WR Total: {stats['total']['wr']}% | "
-            f"Bull: {stats['bull']['wr']}% | "
-            f"Bear: {stats['bear']['wr']}%"
+            f"WR Total: {total_wr}% | "
+            f"Bull: {bull_wr}% | "
+            f"Bear: {bear_wr}%"
         )
         
-        data_summary += f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | Confidence: {c['confidence']} | {metric_str}\n"
-        data_summary += f"  - Backtest: {backtest_str}\n"
+        entry_summary = f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | Confidence: {c['confidence']} | {metric_str}\n"
+        entry_summary += f"  - Backtest: {backtest_str}\n"
         
         # Regression Simulation
         print(f"🔄 Running Regression Sim for {c['ticker']}...")
@@ -89,8 +94,12 @@ def main():
         sim_str = f"ROI: {sim_stats['roi']}% | WR: {sim_stats['wr']}% | Trades: {sim_stats['trades']} | PnL: ${sim_stats['pnl']}"
         if from_cache: sim_str += " (Cached)"
         
-        data_summary += f"  - Simulation (Regression Test 3y): {sim_str}\n"
-        data_summary += f"  - Plan: {plan_str}\n"
+        entry_summary += f"  - Simulation (Regression Test 3y): {sim_str}\n"
+        entry_summary += f"  - Plan: {plan_str}\n"
+        
+        # Append to main summary and log
+        data_summary += entry_summary
+        print(f"📝 Added to Report:\n{entry_summary}")
         
         # Fetch News
         news = get_market_news(f"{c['ticker']} stock crypto news", max_results=2)

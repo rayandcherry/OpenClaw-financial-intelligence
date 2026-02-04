@@ -1,16 +1,27 @@
 import pandas as pd
+try:
+    from config import RISK_PARAMS
+except ImportError:
+    from src.config import RISK_PARAMS
 
 class PositionManager:
     """
     Manages the lifecycle of a SINGLE active trade.
     Responsible for Dynamic Exits (Trailing Stop) and Ladder Profit Taking.
     """
-    def __init__(self, ticker, entry_price, qty, side='LONG', atr_at_entry=None, tp1=None):
+    def __init__(self, ticker, entry_price, qty, side='LONG', atr_at_entry=None, tp1=None, risk_params=None):
         self.ticker = ticker
         self.entry_price = float(entry_price)
         self.qty = float(qty)
         self.side = side.upper()
         self.atr_at_entry = float(atr_at_entry) if atr_at_entry else (entry_price * 0.05) # Fallback
+        
+        # Load Risk Params (Injection overrides Config)
+        config = risk_params if risk_params else RISK_PARAMS
+        self.sl_atr_mult = config.get('initial_sl_atr', 2.0)
+        self.tp1_atr_mult = config.get('tp1_atr', 2.0)
+        self.breakeven_atr = config.get('breakeven_trigger_atr', 1.5)
+        self.trail_atr = config.get('trailing_stop_atr', 2.0)
         
         # State
         self.current_price = self.entry_price
@@ -18,12 +29,19 @@ class PositionManager:
         self.lowest_price = self.entry_price # For shorts
         
         # Dynamic Exit State
-        self.initial_sl = self.entry_price - (2.0 * self.atr_at_entry) if self.side == 'LONG' else self.entry_price + (2.0 * self.atr_at_entry)
+        sl_dist = self.sl_atr_mult * self.atr_at_entry
+        self.initial_sl = self.entry_price - sl_dist if self.side == 'LONG' else self.entry_price + sl_dist
         self.current_sl = self.initial_sl
         self.is_breakeven_active = False
         
         # Ladder Exit State
-        self.tp1 = float(tp1) if tp1 else (self.entry_price + (2.0 * self.atr_at_entry) if self.side == 'LONG' else self.entry_price - (2.0 * self.atr_at_entry))
+        if tp1:
+             self.tp1 = float(tp1)
+        else:
+             tp_dist = self.tp1_atr_mult * self.atr_at_entry
+             self.tp1 = self.entry_price + tp_dist if self.side == 'LONG' else self.entry_price - tp_dist
+             
+        self.tp1_hit = False
         self.tp1_hit = False
         
         # Taxes (Simple estimation)
@@ -76,17 +94,16 @@ class PositionManager:
         if price > self.highest_price:
             self.highest_price = price
             
-        # 1. Breakeven Trigger: If Price > Entry + 1.5 ATR
+        # 1. Breakeven Trigger
         if not self.is_breakeven_active:
-            threshold = self.entry_price + (1.5 * self.atr_at_entry)
+            threshold = self.entry_price + (self.breakeven_atr * self.atr_at_entry)
             if self.highest_price >= threshold:
                 self.current_sl = max(self.current_sl, self.entry_price * 1.001) # Small buffer
                 self.is_breakeven_active = True
         
-        # 2. Trailing Stop Logic (Only active after Breakeven or deep profit)
-        # If we are well in profit, trail by 2 ATR from High
+        # 2. Trailing Stop Logic 
         if self.is_breakeven_active:
-            potential_new_sl = self.highest_price - (2.0 * atr)
+            potential_new_sl = self.highest_price - (self.trail_atr * atr)
             # Never move SL down
             if potential_new_sl > self.current_sl:
                 self.current_sl = potential_new_sl
@@ -96,17 +113,17 @@ class PositionManager:
         if price < self.lowest_price:
             self.lowest_price = price
             
-        # 1. Breakeven Trigger: If Price < Entry - 1.5 ATR
+        # 1. Breakeven Trigger
         if not self.is_breakeven_active:
-            threshold = self.entry_price - (1.5 * self.atr_at_entry)
+            threshold = self.entry_price - (self.breakeven_atr * self.atr_at_entry)
             if self.lowest_price <= threshold:
                 self.current_sl = min(self.current_sl, self.entry_price * 0.999)
                 self.is_breakeven_active = True
                 
         # 2. Trailing Stop
         if self.is_breakeven_active:
-            potential_new_sl = self.lowest_price + (2.0 * atr)
-            # Never move SL up (for shorts) - wait, SL is above price. We want to lower it.
+            potential_new_sl = self.lowest_price + (self.trail_atr * atr)
+            # Never move SL up (for shorts)
             if potential_new_sl < self.current_sl:
                 self.current_sl = potential_new_sl
 

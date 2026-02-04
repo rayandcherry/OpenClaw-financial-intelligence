@@ -1,6 +1,11 @@
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
+import warnings
+
+# Suppress warnings from google-generativeai until migration to google-genai is complete
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic") # Common in LangChain/AI libs
 
 load_dotenv()
 
