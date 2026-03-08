@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+import pytest
 # Add project root and src
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(root_dir)
@@ -10,6 +11,7 @@ import shutil
 from src.tracker.service import TrackerService
 from src.track import save_positions, load_positions, POSITIONS_FILE
 
+@pytest.mark.integration
 class TestTrackerIntegration(unittest.TestCase):
     def setUp(self):
         """Setup isolated environment"""

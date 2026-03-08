@@ -8,15 +8,15 @@ from src.tracker.risk import CapitalAllocator
 class TestPositionManager(unittest.TestCase):
     def test_long_lifecycle(self):
         """Test Long: Entry -> Breakeven -> Trailing Stop -> Exit"""
-        # Entry: 100, ATR=2. SL=96 (100-2*2)
+        # Entry: 100, ATR=2. SL=94 (100-3*2, config initial_sl_atr=3.0)
         pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0)
-        self.assertEqual(pos.current_sl, 96.0)
-        
+        self.assertEqual(pos.current_sl, 94.0)
+
         # 1. Price Rise (Not enough for BE)
         # BE Trigger: Entry + 1.5*ATR = 100 + 3 = 103
         pos.update(102.5, 2.0)
         self.assertFalse(pos.is_breakeven_active)
-        self.assertEqual(pos.current_sl, 96.0)
+        self.assertEqual(pos.current_sl, 94.0)
         
         # 2. Hit Breakeven Trigger
         res = pos.update(104.0, 2.0)

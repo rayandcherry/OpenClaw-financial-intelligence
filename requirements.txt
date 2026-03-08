@@ -1,6 +1,6 @@
 yfinance
 pandas
-google-generativeai
+google-genai
 duckduckgo-search
 requests
 python-dotenv

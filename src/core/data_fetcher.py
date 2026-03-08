@@ -12,7 +12,7 @@ def get_sp500_tickers():
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'}
         response = requests.get(url, headers=headers)
         response.raise_for_status()
-        
+
         tables = pd.read_html(io.StringIO(response.text))
         df = tables[0]
         tickers = df['Symbol'].tolist()
@@ -26,17 +26,21 @@ def get_sp500_tickers():
 
 def fetch_data(ticker, period="1y"):
     try:
-        df = yf.download(ticker, period=period, interval="1d", progress=False)
+        # Use Ticker.history which is more reliable for single-ticker fetches than download
+        dat = yf.Ticker(ticker)
+        df = dat.history(period=period, interval="1d")
+
         if df.empty:
             return None
-        # Flatten MultiIndex if present (yfinance update fix)
+
+        # Ensure no MultiIndex (Ticker.history usually returns simple columns)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
 
-        # Deduplicate columns (fix for yfinance/threading issue returning doubled columns)
-        if not df.columns.is_unique:
-            df = df.loc[:, ~df.columns.duplicated()]
-        
+        # Standardize columns just in case
+        # yfinance history returns: Open, High, Low, Close, Volume, Dividends, Stock Splits
+        # We need OHL C V
+
         return df
     except Exception as e:
         print(f"Error fetching {ticker}: {e}")

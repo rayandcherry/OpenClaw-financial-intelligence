@@ -22,6 +22,7 @@ def process_ticker(ticker):
         
         # Get latest row
         latest = df.iloc[-1]
+        last_date = str(latest.name)
         
         # Check Strategies
         trinity_result = check_trinity_setup(latest, df)
@@ -32,6 +33,7 @@ def process_ticker(ticker):
             logger.info(f"✅ FOUND TRINITY: {ticker}")
             return {
                 "ticker": ticker,
+                "date": last_date,
                 **trinity_result
             }
             
@@ -39,6 +41,7 @@ def process_ticker(ticker):
             logger.info(f"🚨 FOUND PANIC: {ticker}")
             return {
                 "ticker": ticker,
+                "date": last_date,
                 **panic_result
             }
 
@@ -46,6 +49,7 @@ def process_ticker(ticker):
             logger.info(f"🔄 FOUND 2B REVERSAL: {ticker}")
             return {
                 "ticker": ticker,
+                "date": last_date,
                 **reversal_result
             }
             

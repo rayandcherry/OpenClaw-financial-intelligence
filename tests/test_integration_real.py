@@ -2,17 +2,21 @@ import unittest
 import pandas as pd
 import sys
 import os
+import pytest
 
 # Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
-from main import fetch_data, scan_market
+from core.data_fetcher import fetch_data
+from core.scanner import scan_market
 from core.news import get_market_news
 
+@pytest.mark.integration
 class TestRealIntegration(unittest.TestCase):
     """
     These tests connect to REAL external APIs.
     They require internet connection and may be slow.
+    Run with: pytest -m integration
     """
 
     def test_real_fetch_data_spy(self):

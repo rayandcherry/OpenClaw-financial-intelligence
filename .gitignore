@@ -17,3 +17,24 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Data cache
+data/cache/
+*.json.bak
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+tests/data/

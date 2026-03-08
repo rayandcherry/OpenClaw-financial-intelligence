@@ -72,7 +72,8 @@ def main():
             f"Bear: {bear_wr}%"
         )
         
-        entry_summary = f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} | Confidence: {c['confidence']} | {metric_str}\n"
+        date_str = c.get('date', 'N/A')[:10] # Shorten timestamp
+        entry_summary = f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} [{date_str}] | Confidence: {c['confidence']} | {metric_str}\n"
         entry_summary += f"  - Backtest: {backtest_str}\n"
         
         # Regression Simulation

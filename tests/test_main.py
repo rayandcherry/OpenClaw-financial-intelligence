@@ -6,13 +6,13 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
-from main import scan_market, process_ticker
+from core.scanner import scan_market, process_ticker
 
 class TestMainIntegration(unittest.TestCase):
 
-    @patch('main.fetch_data')
-    @patch('main.calculate_indicators')
-    @patch('main.check_trinity_setup')
+    @patch('core.scanner.fetch_data')
+    @patch('core.scanner.calculate_indicators')
+    @patch('core.scanner.check_trinity_setup')
     def test_process_ticker_trinity_found(self, mock_trinity, mock_calc, mock_fetch):
         # Setup
         mock_fetch.return_value = pd.DataFrame({'Close': [100]})
@@ -32,13 +32,13 @@ class TestMainIntegration(unittest.TestCase):
         self.assertEqual(result['ticker'], "AAPL")
         self.assertEqual(result['strategy'], "Trinity")
         
-    @patch('main.fetch_data')
+    @patch('core.scanner.fetch_data')
     def test_process_ticker_fetch_fail(self, mock_fetch):
         mock_fetch.return_value = None
         result = process_ticker("BAD_TICKER")
         self.assertIsNone(result)
 
-    @patch('main.process_ticker')
+    @patch('core.scanner.process_ticker')
     def test_scan_market_multithreading(self, mock_process):
         # Simulate 2 hits and 1 miss
         mock_process.side_effect = [
