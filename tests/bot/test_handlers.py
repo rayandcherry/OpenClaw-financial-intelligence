@@ -128,13 +128,17 @@ async def test_scan_handler_shows_rate_limit_message():
 
     mock_fmt = MagicMock()
 
+    mock_redis = AsyncMock()
+    mock_redis.get_rate_limit_ttl = AsyncMock(return_value=1800)  # 30 min left
+
     with patch("src.bot.handlers.scan.get_user_service", return_value=mock_user_svc):
         with patch("src.bot.handlers.scan.get_scan_service", return_value=mock_scan_svc):
             with patch("src.bot.handlers.scan.get_report_formatter", return_value=mock_fmt):
-                await scan_handler(update, ctx)
+                with patch("src.bot.handlers.scan.get_redis_client", return_value=mock_redis):
+                    await scan_handler(update, ctx)
 
     last_reply = update.message.reply_text.call_args_list[-1][0][0]
-    assert "rate limit" in last_reply.lower() or "still running" in last_reply.lower()
+    assert "rate limit" in last_reply.lower() or "30 minute" in last_reply.lower()
     mock_user_svc.log_scan.assert_called_once()
     assert mock_user_svc.log_scan.call_args[1]["status"] == "rejected"
 

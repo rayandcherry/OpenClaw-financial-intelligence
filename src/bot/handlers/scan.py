@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from telegram import Update
 from telegram.ext import ContextTypes
-from src.bot.handlers import get_user_service, get_scan_service, get_report_formatter
+from src.bot.handlers import get_user_service, get_scan_service, get_report_formatter, get_redis_client
 from src.bot.services.scan_service import ScanService
 
 logger = logging.getLogger(__name__)
@@ -44,9 +44,18 @@ async def scan_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 signals_found=0, status="rejected", started_at=started_at,
                 finished_at=datetime.now(timezone.utc),
             )
-            await update.message.reply_text(
-                "Your last scan is still running, hang tight. Or you've hit the rate limit (10/hour)."
-            )
+            # Provide specific feedback on why scan was rejected
+            redis = get_redis_client()
+            ttl = await redis.get_rate_limit_ttl(user.id)
+            if ttl > 0:
+                minutes = (ttl + 59) // 60  # round up
+                await update.message.reply_text(
+                    f"Rate limit reached (10/hour). Resets in {minutes} minute{'s' if minutes != 1 else ''}."
+                )
+            else:
+                await update.message.reply_text(
+                    "Your last scan is still running, hang tight."
+                )
             return
 
         messages = fmt.format_report_messages(signals, total_scanned=len(tickers))

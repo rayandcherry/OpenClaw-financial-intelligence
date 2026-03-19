@@ -45,5 +45,10 @@ class RedisClient:
             await self.redis.expire(key, 3600)
         return count <= max_per_hour
 
+    async def get_rate_limit_ttl(self, user_id: int) -> int:
+        """Return seconds until rate limit resets, or 0 if no limit active."""
+        ttl = await self.redis.ttl(f"rate:{user_id}:scans")
+        return max(ttl, 0)
+
     async def close(self):
         await self.redis.close()
