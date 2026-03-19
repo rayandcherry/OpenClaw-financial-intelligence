@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import time as dt_time
 from sqlalchemy.orm import Session
 from src.bot.db.models import User, UserWatchlist, UserSchedule
