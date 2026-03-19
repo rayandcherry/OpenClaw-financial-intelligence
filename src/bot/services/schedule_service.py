@@ -99,12 +99,29 @@ class ScheduleService:
             except Exception as e:
                 logger.error(f"Failed to log scan for user {user_id}: {e}")
 
+    @staticmethod
+    def _is_us_market_day() -> bool:
+        """Check if today is a US market day (weekday). Does not check holidays."""
+        return datetime.now(timezone.utc).weekday() < 5  # Mon=0, Fri=4
+
     async def trigger_scheduled_scan(self, scan_time: dt_time, deliver_fn):
         users = self.collect_users_for_time(scan_time)
         if not users:
             return
 
         user_tickers = self.build_user_tickers_map(users)
+
+        # On weekends, remove US stock tickers (markets closed, stale data)
+        if not self._is_us_market_day():
+            for uid in user_tickers:
+                user_tickers[uid] = [t for t in user_tickers[uid] if t.endswith("-USD")]
+            # Remove users with no tickers left
+            user_tickers = {uid: tl for uid, tl in user_tickers.items() if tl}
+
+        if not user_tickers:
+            logger.info(f"Scheduled scan at {scan_time}: no tickers to scan (market closed)")
+            return
+
         user_telegram_map = {u.id: u.telegram_id for u in users}
         user_strategies = {u.id: u.strategies for u in users}
 

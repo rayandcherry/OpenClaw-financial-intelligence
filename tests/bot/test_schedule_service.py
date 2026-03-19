@@ -93,3 +93,28 @@ async def test_execute_batch_deactivates_blocked_user(schedule_svc, mock_user_sv
     mock_user_svc.deactivate.assert_called_once_with(1)
     # Should only attempt delivery once (no retries for blocked users)
     assert deliver.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_trigger_scan_skips_us_on_weekend(schedule_svc, mock_user_svc, mock_scan_svc, mock_report_fmt):
+    mock_user = MagicMock()
+    mock_user.id = 1
+    mock_user.telegram_id = 111
+    mock_user.strategies = ["TRINITY"]
+    mock_user.scan_mode = "ALL"
+    mock_user_svc.get_users_for_time.return_value = [mock_user]
+    mock_user_svc.get_watchlist.return_value = ["AAPL", "BTC-USD"]
+
+    mock_scan_svc.batch_scan = AsyncMock(return_value={1: []})
+    mock_scan_svc.dedupe_tickers = MagicMock(return_value=["BTC-USD"])
+
+    deliver = AsyncMock()
+
+    # Simulate Saturday (weekday=5)
+    with patch.object(ScheduleService, '_is_us_market_day', return_value=False):
+        await schedule_svc.trigger_scheduled_scan(time(8, 0), deliver)
+
+    # batch_scan should only receive crypto tickers
+    call_args = mock_scan_svc.batch_scan.call_args
+    user_tickers_passed = call_args[0][0]
+    assert user_tickers_passed == {1: ["BTC-USD"]}
