@@ -12,6 +12,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/watchlist — Show your watchlist\n"
         "/watch AAPL NVDA — Add tickers\n"
         "/unwatch AAPL — Remove a ticker\n"
+        "/clear — Remove all tickers\n"
         "/presets — Browse preset watchlists\n\n"
         "*Schedule*\n"
         "/schedule — Show scan schedule\n"

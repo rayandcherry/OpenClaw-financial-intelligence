@@ -51,6 +51,12 @@ class UserService:
         self.session.query(UserWatchlist).filter_by(user_id=user_id, ticker=ticker.upper()).delete()
         self.session.commit()
 
+    def clear_watchlist(self, user_id: int) -> int:
+        """Remove all tickers from watchlist. Returns count removed."""
+        count = self.session.query(UserWatchlist).filter_by(user_id=user_id).delete()
+        self.session.commit()
+        return count
+
     def get_watchlist(self, user_id: int) -> list[str]:
         rows = self.session.query(UserWatchlist).filter_by(user_id=user_id).all()
         return [r.ticker for r in rows]

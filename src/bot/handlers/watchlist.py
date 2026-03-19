@@ -107,6 +107,20 @@ async def unwatch_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Removed {ticker} from your watchlist.")
 
 
+async def clear_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_svc = get_user_service()
+    user = user_svc.get_by_telegram_id(update.effective_user.id)
+    if not user:
+        await update.message.reply_text("Use /start to set up your account first.")
+        return
+
+    count = user_svc.clear_watchlist(user.id)
+    if count == 0:
+        await update.message.reply_text("Your watchlist is already empty.")
+    else:
+        await update.message.reply_text(f"Cleared {count} ticker{'s' if count != 1 else ''} from your watchlist.")
+
+
 async def presets_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(f"{name} ({len(tickers)})", callback_data=f"preset:{name}")]

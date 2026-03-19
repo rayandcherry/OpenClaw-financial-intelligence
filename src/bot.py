@@ -24,7 +24,7 @@ from bot.services.schedule_service import ScheduleService
 from bot.services.report_formatter import ReportFormatter
 from bot.handlers import set_services
 from bot.handlers.start import start_handler
-from bot.handlers.watchlist import watchlist_handler, watch_handler, unwatch_handler, presets_handler, preset_callback
+from bot.handlers.watchlist import watchlist_handler, watch_handler, unwatch_handler, clear_handler, presets_handler, preset_callback
 from bot.handlers.scan import scan_handler
 from bot.handlers.schedule import schedule_handler, pause_handler, resume_handler
 from bot.handlers.settings import settings_handler, lang_handler, mode_handler, strategies_handler
@@ -88,6 +88,7 @@ def main():
     app.add_handler(CommandHandler("watch", watch_handler))
     app.add_handler(CommandHandler("unwatch", unwatch_handler))
     app.add_handler(CommandHandler("presets", presets_handler))
+    app.add_handler(CommandHandler("clear", clear_handler))
     app.add_handler(CommandHandler("scan", scan_handler))
     app.add_handler(CommandHandler("status", status_handler))
     app.add_handler(CommandHandler("last", last_handler))
