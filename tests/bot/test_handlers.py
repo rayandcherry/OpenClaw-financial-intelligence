@@ -176,3 +176,31 @@ async def test_help_handler():
     reply_text = update.message.reply_text.call_args[0][0]
     assert "/scan" in reply_text
     assert "/watchlist" in reply_text
+    assert "/status" in reply_text
+
+
+@pytest.mark.asyncio
+async def test_status_handler_shows_overview():
+    from src.bot.handlers.status import status_handler
+
+    update = make_update("/status")
+    ctx = make_context()
+
+    mock_user_svc = MagicMock()
+    mock_user_svc.get_by_telegram_id.return_value = MagicMock(
+        id=1, scan_mode="ALL", lang="EN", strategies=["TRINITY", "PANIC"]
+    )
+    mock_user_svc.get_watchlist.return_value = ["AAPL", "NVDA"]
+    mock_user_svc.get_schedules.return_value = []
+    mock_user_svc.get_scan_stats.return_value = {
+        "total_scans": 5, "successful_scans": 4,
+        "total_signals": 12, "last_scan_at": None, "last_signals": 0,
+    }
+
+    with patch("src.bot.handlers.status.get_user_service", return_value=mock_user_svc):
+        await status_handler(update, ctx)
+
+    reply_text = update.message.reply_text.call_args[0][0]
+    assert "2 tickers" in reply_text
+    assert "4/5" in reply_text
+    assert "12" in reply_text

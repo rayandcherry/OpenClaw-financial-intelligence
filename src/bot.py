@@ -29,6 +29,7 @@ from bot.handlers.scan import scan_handler
 from bot.handlers.schedule import schedule_handler, pause_handler, resume_handler
 from bot.handlers.settings import settings_handler, lang_handler, mode_handler, strategies_handler
 from bot.handlers.help import help_handler
+from bot.handlers.status import status_handler
 from bot.health import start_health_server
 
 logging.basicConfig(
@@ -87,6 +88,7 @@ def main():
     app.add_handler(CommandHandler("unwatch", unwatch_handler))
     app.add_handler(CommandHandler("presets", presets_handler))
     app.add_handler(CommandHandler("scan", scan_handler))
+    app.add_handler(CommandHandler("status", status_handler))
     app.add_handler(CommandHandler("schedule", schedule_handler))
     app.add_handler(CommandHandler("pause", pause_handler))
     app.add_handler(CommandHandler("resume", resume_handler))

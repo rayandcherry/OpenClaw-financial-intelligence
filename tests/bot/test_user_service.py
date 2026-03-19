@@ -99,3 +99,27 @@ def test_log_scan(svc, db):
     assert log.id is not None
     assert log.signals_found == 3
     assert log.status == "done"
+
+
+def test_get_scan_stats(svc, db):
+    from datetime import datetime, timezone
+    user = svc.register(telegram_id=2222, username="stats_user")
+    now = datetime.now(timezone.utc)
+
+    svc.log_scan(user.id, "manual", 10, 3, "done", started_at=now, finished_at=now)
+    svc.log_scan(user.id, "scheduled", 20, 0, "done", started_at=now, finished_at=now)
+    svc.log_scan(user.id, "manual", 5, 0, "failed", started_at=now, finished_at=now)
+
+    stats = svc.get_scan_stats(user.id)
+    assert stats["total_scans"] == 3
+    assert stats["successful_scans"] == 2
+    assert stats["total_signals"] == 3
+    assert stats["last_scan_at"] is not None
+
+
+def test_get_scan_stats_empty(svc, db):
+    user = svc.register(telegram_id=3333, username="empty_user")
+    stats = svc.get_scan_stats(user.id)
+    assert stats["total_scans"] == 0
+    assert stats["total_signals"] == 0
+    assert stats["last_scan_at"] is None

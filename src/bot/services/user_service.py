@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import time as dt_time
 from sqlalchemy.orm import Session
-from src.bot.db.models import User, UserWatchlist, UserSchedule
+from sqlalchemy import func
+from src.bot.db.models import User, UserWatchlist, UserSchedule, ScanLog
 from src.config import BOT_CONFIG
 
 
@@ -74,6 +75,25 @@ class UserService:
         user = self.session.get(User, user_id)
         user.is_active = False
         self.session.commit()
+
+    def get_scan_stats(self, user_id: int) -> dict:
+        """Return scan statistics for a user."""
+        total = self.session.query(func.count(ScanLog.id)).filter_by(user_id=user_id).scalar() or 0
+        done = self.session.query(func.count(ScanLog.id)).filter_by(user_id=user_id, status="done").scalar() or 0
+        total_signals = self.session.query(func.coalesce(func.sum(ScanLog.signals_found), 0)).filter_by(user_id=user_id, status="done").scalar()
+        last_scan = (
+            self.session.query(ScanLog)
+            .filter_by(user_id=user_id, status="done")
+            .order_by(ScanLog.finished_at.desc())
+            .first()
+        )
+        return {
+            "total_scans": total,
+            "successful_scans": done,
+            "total_signals": int(total_signals),
+            "last_scan_at": last_scan.finished_at if last_scan else None,
+            "last_signals": last_scan.signals_found if last_scan else 0,
+        }
 
     def log_scan(self, user_id: int, triggered_by: str, tickers_count: int,
                  signals_found: int, status: str, report_text: str = None,
