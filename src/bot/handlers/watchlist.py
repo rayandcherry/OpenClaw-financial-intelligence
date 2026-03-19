@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -60,14 +61,20 @@ async def watch_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /watch AAPL NVDA BTC-USD")
         return
 
-    # Validate tickers against yfinance
+    # Pre-filter: only allow valid ticker format (letters, digits, hyphens, dots, max 12 chars)
+    _TICKER_RE = re.compile(r'^[A-Z0-9.\-]{1,12}$')
     upper_tickers = [t.upper() for t in tickers]
+    candidates = [t for t in upper_tickers if _TICKER_RE.match(t)]
+    rejected_format = [t for t in upper_tickers if not _TICKER_RE.match(t)]
+
+    # Validate remaining against yfinance
     valid, invalid = [], []
-    for t in upper_tickers:
+    for t in candidates:
         if await _validate_ticker(t):
             valid.append(t)
         else:
             invalid.append(t)
+    invalid.extend(rejected_format)
 
     msg_parts = []
     if valid:
