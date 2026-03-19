@@ -78,7 +78,8 @@ class ScanService:
             await self.redis.release_scan_lock(user_id)
 
     async def batch_scan(
-        self, user_tickers: dict[int, list[str]]
+        self, user_tickers: dict[int, list[str]],
+        user_strategies: dict[int, list[str] | None] | None = None,
     ) -> dict[int, list[dict]]:
         all_tickers = self.dedupe_tickers(user_tickers)
         all_signals = await self._run_scan(all_tickers)
@@ -91,6 +92,8 @@ class ScanService:
         results = {}
         for user_id, tickers in user_tickers.items():
             user_signals = [signal_by_ticker[t] for t in tickers if t in signal_by_ticker]
+            if user_strategies and user_id in user_strategies:
+                user_signals = self._filter_by_strategies(user_signals, user_strategies[user_id])
             results[user_id] = user_signals
 
         return results

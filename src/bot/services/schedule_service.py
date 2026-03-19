@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import time as dt_time, datetime, timezone
@@ -40,12 +42,13 @@ class ScheduleService:
         user_tickers: dict[int, list[str]],
         user_telegram_map: dict[int, int],
         deliver_fn,
+        user_strategies: dict[int, list] | None = None,
     ):
         if not user_tickers:
             return
 
         started_at = datetime.now(timezone.utc)
-        results = await self.scan_service.batch_scan(user_tickers)
+        results = await self.scan_service.batch_scan(user_tickers, user_strategies=user_strategies)
 
         for user_id, signals in results.items():
             telegram_id = user_telegram_map.get(user_id)
@@ -101,8 +104,9 @@ class ScheduleService:
 
         user_tickers = self.build_user_tickers_map(users)
         user_telegram_map = {u.id: u.telegram_id for u in users}
+        user_strategies = {u.id: u.strategies for u in users}
 
         logger.info(f"Scheduled scan at {scan_time}: {len(users)} users, "
                      f"{len(self.scan_service.dedupe_tickers(user_tickers))} unique tickers")
 
-        await self.execute_batch(user_tickers, user_telegram_map, deliver_fn)
+        await self.execute_batch(user_tickers, user_telegram_map, deliver_fn, user_strategies)
