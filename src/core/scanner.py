@@ -1,7 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from core.data_fetcher import fetch_data
-from core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup, check_2b_setup
+from src.core.data_fetcher import fetch_data
+from src.core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup, check_2b_setup
 
 # Configure Logger
 logging.basicConfig(level=logging.INFO, format='%(message)s')

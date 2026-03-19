@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from config import STRATEGY_PARAMS
+from src.config import STRATEGY_PARAMS
 
 def calculate_indicators(df):
     """
