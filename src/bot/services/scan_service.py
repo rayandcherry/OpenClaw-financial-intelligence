@@ -29,14 +29,24 @@ class ScanService:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(_executor, get_market_news, ticker)
 
+    async def _safe_fetch_news(self, ticker: str) -> tuple[str, str | None]:
+        """Fetch news for a ticker, returning (ticker, news_text) or (ticker, None) on failure."""
+        try:
+            news = await self._fetch_news(ticker)
+            return ticker, news
+        except Exception as e:
+            logger.warning(f"News fetch failed for {ticker}: {e}")
+            return ticker, None
+
     async def _enrich_signals(self, signals: list[dict]) -> list[dict]:
+        if not signals:
+            return signals
+        # Fetch news for all signals concurrently
+        tasks = [self._safe_fetch_news(s["ticker"]) for s in signals]
+        results = await asyncio.gather(*tasks)
+        news_map = dict(results)
         for signal in signals:
-            try:
-                news = await self._fetch_news(signal["ticker"])
-                signal["news"] = news
-            except Exception as e:
-                logger.warning(f"News fetch failed for {signal['ticker']}: {e}")
-                signal["news"] = None
+            signal["news"] = news_map.get(signal["ticker"])
         return signals
 
     async def scan_for_user(
