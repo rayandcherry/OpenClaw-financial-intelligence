@@ -21,13 +21,17 @@ async def scan_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
         tickers = [context.args[0].upper()]
     else:
-        tickers = user_svc.get_watchlist(user.id)
-        # Apply scan mode filter (US/CRYPTO/ALL)
-        tickers = ScanService.filter_by_mode(tickers, user.scan_mode)
-
-    if not tickers:
-        await update.message.reply_text("No tickers to scan. Use /watch AAPL NVDA or /presets to add some.")
-        return
+        all_tickers = user_svc.get_watchlist(user.id)
+        if not all_tickers:
+            await update.message.reply_text("No tickers to scan. Use /watch AAPL NVDA or /presets to add some.")
+            return
+        tickers = ScanService.filter_by_mode(all_tickers, user.scan_mode)
+        if not tickers:
+            await update.message.reply_text(
+                f"No {user.scan_mode} tickers in your watchlist. "
+                f"Use /mode ALL to scan everything, or /watch to add matching tickers."
+            )
+            return
 
     await update.message.reply_text(f"Scanning {len(tickers)} ticker{'s' if len(tickers) != 1 else ''}...")
 
