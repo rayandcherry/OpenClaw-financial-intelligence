@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import time as dt_time, datetime, timezone
 from src.bot.services.report_formatter import ReportFormatter
@@ -44,10 +45,18 @@ class ScheduleService:
 
             delivery_ok = True
             for msg in messages:
-                try:
-                    await deliver_fn(telegram_id, msg)
-                except Exception as e:
-                    logger.error(f"Delivery failed for user {user_id}: {e}")
+                delivered = False
+                for attempt in range(3):
+                    try:
+                        await deliver_fn(telegram_id, msg)
+                        delivered = True
+                        break
+                    except Exception as e:
+                        if attempt < 2:
+                            await asyncio.sleep(2 ** attempt * 5)  # 5s, 10s
+                        else:
+                            logger.error(f"Delivery failed for user {user_id} after 3 attempts: {e}")
+                if not delivered:
                     delivery_ok = False
 
             try:
