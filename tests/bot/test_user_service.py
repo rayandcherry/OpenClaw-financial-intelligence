@@ -98,3 +98,16 @@ def test_deactivate(svc, db):
     svc.deactivate(user.id)
     user = svc.get_by_telegram_id(1010)
     assert user.is_active is False
+
+
+def test_log_scan(svc, db):
+    user = svc.register(telegram_id=1111, username="logger")
+    from datetime import datetime, timezone
+    log = svc.log_scan(
+        user_id=user.id, triggered_by="manual", tickers_count=10,
+        signals_found=3, status="done", report_text="Test report",
+        started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
+    )
+    assert log.id is not None
+    assert log.signals_found == 3
+    assert log.status == "done"

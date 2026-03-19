@@ -31,6 +31,7 @@ class ScheduleService:
         if not user_tickers:
             return
 
+        started_at = datetime.now(timezone.utc)
         results = await self.scan_service.batch_scan(user_tickers)
 
         for user_id, signals in results.items():
@@ -41,11 +42,27 @@ class ScheduleService:
             total_scanned = len(user_tickers.get(user_id, []))
             messages = self.report_formatter.format_report_messages(signals, total_scanned)
 
+            delivery_ok = True
             for msg in messages:
                 try:
                     await deliver_fn(telegram_id, msg)
                 except Exception as e:
                     logger.error(f"Delivery failed for user {user_id}: {e}")
+                    delivery_ok = False
+
+            try:
+                self.user_service.log_scan(
+                    user_id=user_id,
+                    triggered_by="scheduled",
+                    tickers_count=total_scanned,
+                    signals_found=len(signals),
+                    status="done" if delivery_ok else "failed",
+                    report_text="\n".join(messages),
+                    started_at=started_at,
+                    finished_at=datetime.now(timezone.utc),
+                )
+            except Exception as e:
+                logger.error(f"Failed to log scan for user {user_id}: {e}")
 
     async def trigger_scheduled_scan(self, scan_time: dt_time, deliver_fn):
         users = self.collect_users_for_time(scan_time)

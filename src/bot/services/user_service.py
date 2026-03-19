@@ -73,6 +73,24 @@ class UserService:
         user.is_active = False
         self.session.commit()
 
+    def log_scan(self, user_id: int, triggered_by: str, tickers_count: int,
+                 signals_found: int, status: str, report_text: str = None,
+                 started_at=None, finished_at=None) -> 'ScanLog':
+        from src.bot.db.models import ScanLog
+        log = ScanLog(
+            user_id=user_id,
+            triggered_by=triggered_by,
+            tickers_count=tickers_count,
+            signals_found=signals_found,
+            status=status,
+            report_text=report_text,
+            started_at=started_at,
+            finished_at=finished_at,
+        )
+        self.session.add(log)
+        self.session.commit()
+        return log
+
     def get_users_for_time(self, scan_time: dt_time) -> list[User]:
         schedule_rows = (
             self.session.query(UserSchedule)
