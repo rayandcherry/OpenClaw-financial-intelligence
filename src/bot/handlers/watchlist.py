@@ -45,8 +45,7 @@ def _check_ticker(ticker: str) -> bool:
 
 async def _validate_ticker(ticker: str) -> bool:
     """Async wrapper for ticker validation."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(_validate_pool, _check_ticker, ticker)
+    return await asyncio.get_running_loop().run_in_executor(_validate_pool, _check_ticker, ticker)
 
 
 async def watch_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

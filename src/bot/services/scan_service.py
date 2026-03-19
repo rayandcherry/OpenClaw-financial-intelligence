@@ -22,12 +22,10 @@ class ScanService:
         return list(unique)
 
     async def _run_scan(self, tickers: list[str]) -> list[dict]:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(_executor, scan_market, tickers)
+        return await asyncio.get_running_loop().run_in_executor(_executor, scan_market, tickers)
 
     async def _fetch_news(self, ticker: str) -> str:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(_executor, get_market_news, ticker)
+        return await asyncio.get_running_loop().run_in_executor(_executor, get_market_news, ticker)
 
     async def _safe_fetch_news(self, ticker: str) -> tuple[str, str | None]:
         """Fetch news for a ticker, returning (ticker, news_text) or (ticker, None) on failure."""
