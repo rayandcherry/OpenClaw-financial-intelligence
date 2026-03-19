@@ -100,6 +100,19 @@ def main():
     app.add_handler(CommandHandler("strategies", strategies_handler))
     app.add_handler(CallbackQueryHandler(preset_callback, pattern="^preset:"))
 
+    # Global error handler — ensures users always get feedback
+    async def error_handler(update, context):
+        logger.exception("Unhandled exception in handler", exc_info=context.error)
+        if update and update.effective_message:
+            try:
+                await update.effective_message.reply_text(
+                    "Something went wrong. Please try again or use /help."
+                )
+            except Exception:
+                pass  # Can't even reply — just log
+
+    app.add_error_handler(error_handler)
+
     # Schedule: check every minute for users who need scanning
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
