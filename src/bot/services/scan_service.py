@@ -71,15 +71,22 @@ class ScanService:
             signal["news"] = news_map.get(signal["ticker"])
         return signals
 
+    # Map user-facing strategy names to scanner output names
+    _STRATEGY_NAME_MAP = {
+        "trinity": {"trinity"},
+        "panic": {"panic"},
+        "2b": {"2b_reversal", "2b reversal", "2b"},
+    }
+
     def _filter_by_strategies(self, signals: list[dict], strategies: list[str] | None) -> list[dict]:
         """Filter signals to only include user's enabled strategies."""
         if not strategies:
             return signals
-        # Normalize: strategy names in signals are lowercase ("trinity", "panic", "2B_Reversal")
-        allowed = {s.lower() for s in strategies}
-        # Also map "2b" -> matches "2b_reversal"
-        return [s for s in signals if s.get("strategy", "").lower() in allowed
-                or any(s.get("strategy", "").lower().startswith(a.lower()) for a in strategies)]
+        allowed = set()
+        for s in strategies:
+            matches = self._STRATEGY_NAME_MAP.get(s.lower(), {s.lower()})
+            allowed.update(matches)
+        return [s for s in signals if s.get("strategy", "").lower() in allowed]
 
     async def scan_for_user(
         self, user_id: int, tickers: list[str], strategies: list[str] | None = None,
