@@ -85,6 +85,61 @@ async def test_scan_handler_returns_report():
 
 
 @pytest.mark.asyncio
+async def test_scan_handler_shows_error_on_failure():
+    from src.bot.handlers.scan import scan_handler
+
+    update = make_update("/scan")
+    ctx = make_context()
+
+    mock_user_svc = MagicMock()
+    mock_user_svc.get_by_telegram_id.return_value = MagicMock(id=1)
+    mock_user_svc.get_watchlist.return_value = ["AAPL"]
+
+    mock_scan_svc = AsyncMock()
+    mock_scan_svc.scan_for_user = AsyncMock(side_effect=RuntimeError("yfinance down"))
+
+    mock_fmt = MagicMock()
+
+    with patch("src.bot.handlers.scan.get_user_service", return_value=mock_user_svc):
+        with patch("src.bot.handlers.scan.get_scan_service", return_value=mock_scan_svc):
+            with patch("src.bot.handlers.scan.get_report_formatter", return_value=mock_fmt):
+                await scan_handler(update, ctx)
+
+    # Last reply should be the error message (after "Scanning...")
+    last_reply = update.message.reply_text.call_args_list[-1][0][0]
+    assert "went wrong" in last_reply.lower() or "try again" in last_reply.lower()
+    mock_user_svc.log_scan.assert_called_once()
+    assert mock_user_svc.log_scan.call_args[1]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_scan_handler_shows_rate_limit_message():
+    from src.bot.handlers.scan import scan_handler
+
+    update = make_update("/scan")
+    ctx = make_context()
+
+    mock_user_svc = MagicMock()
+    mock_user_svc.get_by_telegram_id.return_value = MagicMock(id=1)
+    mock_user_svc.get_watchlist.return_value = ["AAPL"]
+
+    mock_scan_svc = AsyncMock()
+    mock_scan_svc.scan_for_user = AsyncMock(return_value=None)
+
+    mock_fmt = MagicMock()
+
+    with patch("src.bot.handlers.scan.get_user_service", return_value=mock_user_svc):
+        with patch("src.bot.handlers.scan.get_scan_service", return_value=mock_scan_svc):
+            with patch("src.bot.handlers.scan.get_report_formatter", return_value=mock_fmt):
+                await scan_handler(update, ctx)
+
+    last_reply = update.message.reply_text.call_args_list[-1][0][0]
+    assert "rate limit" in last_reply.lower() or "still running" in last_reply.lower()
+    mock_user_svc.log_scan.assert_called_once()
+    assert mock_user_svc.log_scan.call_args[1]["status"] == "rejected"
+
+
+@pytest.mark.asyncio
 async def test_watch_handler_validates_and_adds():
     from src.bot.handlers.watchlist import watch_handler
 
