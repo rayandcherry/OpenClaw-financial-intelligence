@@ -6,6 +6,18 @@ from src.bot.services.report_formatter import ReportFormatter
 logger = logging.getLogger(__name__)
 
 
+def _is_blocked_error(exc: Exception) -> bool:
+    """Check if an exception indicates the user blocked the bot (Telegram 403)."""
+    try:
+        from telegram.error import Forbidden
+        if isinstance(exc, Forbidden):
+            return True
+    except ImportError:
+        pass
+    # Fallback: check string representation for "403" or "Forbidden"
+    return "403" in str(exc) or "Forbidden" in str(exc)
+
+
 class ScheduleService:
     def __init__(self, user_service, scan_service, report_formatter: ReportFormatter = None):
         self.user_service = user_service
@@ -44,7 +56,10 @@ class ScheduleService:
             messages = self.report_formatter.format_report_messages(signals, total_scanned)
 
             delivery_ok = True
+            user_blocked = False
             for msg in messages:
+                if user_blocked:
+                    break
                 delivered = False
                 for attempt in range(3):
                     try:
@@ -52,6 +67,12 @@ class ScheduleService:
                         delivered = True
                         break
                     except Exception as e:
+                        # Detect user blocking the bot (Telegram 403)
+                        if _is_blocked_error(e):
+                            logger.info(f"User {user_id} blocked the bot, deactivating")
+                            self.user_service.deactivate(user_id)
+                            user_blocked = True
+                            break
                         if attempt < 2:
                             await asyncio.sleep(2 ** attempt * 5)  # 5s, 10s
                         else:

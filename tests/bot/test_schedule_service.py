@@ -71,3 +71,25 @@ async def test_execute_batch_delivers_reports(schedule_svc, mock_scan_svc, mock_
     await schedule_svc.execute_batch(user_tickers, user_telegram_map, deliver)
 
     assert deliver.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_batch_deactivates_blocked_user(schedule_svc, mock_user_svc, mock_scan_svc, mock_report_fmt):
+    mock_scan_svc.batch_scan = AsyncMock(return_value={
+        1: [{"ticker": "AAPL", "strategy": "trinity"}],
+    })
+    mock_report_fmt.format_report_messages.return_value = ["Report"]
+
+    # Simulate Telegram 403 Forbidden
+    forbidden_error = Exception("Forbidden: bot was blocked by the user")
+    deliver = AsyncMock(side_effect=forbidden_error)
+
+    user_tickers = {1: ["AAPL"]}
+    user_telegram_map = {1: 111}
+
+    with patch("src.bot.services.schedule_service._is_blocked_error", return_value=True):
+        await schedule_svc.execute_batch(user_tickers, user_telegram_map, deliver)
+
+    mock_user_svc.deactivate.assert_called_once_with(1)
+    # Should only attempt delivery once (no retries for blocked users)
+    assert deliver.call_count == 1
