@@ -100,6 +100,14 @@ def main():
     app.add_handler(CommandHandler("strategies", strategies_handler))
     app.add_handler(CallbackQueryHandler(preset_callback, pattern="^preset:"))
 
+    # Catch-all for unknown commands
+    from telegram.ext import MessageHandler, filters
+
+    async def unknown_command(update, context):
+        await update.message.reply_text("Unknown command. Type /help for available commands.")
+
+    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
+
     # Global error handler — ensures users always get feedback
     async def error_handler(update, context):
         logger.exception("Unhandled exception in handler", exc_info=context.error)
