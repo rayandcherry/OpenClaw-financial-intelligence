@@ -4,6 +4,7 @@ import asyncio
 import logging
 from datetime import time as dt_time, datetime, timezone
 from src.bot.services.report_formatter import ReportFormatter
+from src.bot.services.scan_service import ScanService
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class ScheduleService:
         result = {}
         for user in users:
             tickers = self.user_service.get_watchlist(user.id)
+            tickers = ScanService.filter_by_mode(tickers, getattr(user, 'scan_mode', 'ALL'))
             if tickers:
                 result[user.id] = tickers
         return result
