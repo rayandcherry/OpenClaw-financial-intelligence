@@ -1,7 +1,10 @@
+import logging
 from datetime import datetime, timezone
 from telegram import Update
 from telegram.ext import ContextTypes
 from src.bot.handlers import get_user_service, get_scan_service, get_report_formatter
+
+logger = logging.getLogger(__name__)
 
 
 async def scan_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -52,9 +55,15 @@ async def scan_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             finished_at=datetime.now(timezone.utc),
         )
     except Exception as e:
-        user_svc.log_scan(
-            user_id=user.id, triggered_by="manual", tickers_count=len(tickers),
-            signals_found=0, status="failed", started_at=started_at,
-            finished_at=datetime.now(timezone.utc),
+        logger.exception(f"Scan failed for user {user.id}: {e}")
+        try:
+            user_svc.log_scan(
+                user_id=user.id, triggered_by="manual", tickers_count=len(tickers),
+                signals_found=0, status="failed", started_at=started_at,
+                finished_at=datetime.now(timezone.utc),
+            )
+        except Exception:
+            pass  # Don't let logging failure mask the original error
+        await update.message.reply_text(
+            "Something went wrong during the scan. Please try again in a few minutes."
         )
-        raise
