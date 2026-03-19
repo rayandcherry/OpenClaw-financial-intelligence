@@ -36,11 +36,20 @@ class ScanService:
             unique.update(tickers)
         return list(unique)
 
+    SCAN_TIMEOUT = 120  # seconds - yfinance can hang
+    NEWS_TIMEOUT = 10   # seconds per ticker
+
     async def _run_scan(self, tickers: list[str]) -> list[dict]:
-        return await asyncio.get_running_loop().run_in_executor(self._executor, scan_market, tickers)
+        return await asyncio.wait_for(
+            asyncio.get_running_loop().run_in_executor(self._executor, scan_market, tickers),
+            timeout=self.SCAN_TIMEOUT,
+        )
 
     async def _fetch_news(self, ticker: str) -> str:
-        return await asyncio.get_running_loop().run_in_executor(self._executor, get_market_news, ticker)
+        return await asyncio.wait_for(
+            asyncio.get_running_loop().run_in_executor(self._executor, get_market_news, ticker),
+            timeout=self.NEWS_TIMEOUT,
+        )
 
     async def _safe_fetch_news(self, ticker: str) -> tuple[str, str | None]:
         """Fetch news for a ticker, returning (ticker, news_text) or (ticker, None) on failure."""

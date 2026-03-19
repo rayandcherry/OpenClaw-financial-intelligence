@@ -116,3 +116,13 @@ def test_filter_by_mode():
     assert ScanService.filter_by_mode(tickers, None) == tickers
     assert ScanService.filter_by_mode(tickers, "US") == ["AAPL", "NVDA"]
     assert ScanService.filter_by_mode(tickers, "CRYPTO") == ["BTC-USD", "ETH-USD"]
+
+
+@pytest.mark.asyncio
+async def test_news_timeout_returns_none(scan_svc, mock_redis):
+    """News fetch that times out should gracefully return None, not crash."""
+    with patch.object(scan_svc, '_fetch_news', side_effect=asyncio.TimeoutError()):
+        ticker, news = await scan_svc._safe_fetch_news("AAPL")
+
+    assert ticker == "AAPL"
+    assert news is None  # timed out gracefully
