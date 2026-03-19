@@ -106,3 +106,13 @@ def test_filter_by_strategies(scan_svc):
     # None means no filter
     filtered = scan_svc._filter_by_strategies(signals, None)
     assert len(filtered) == 3
+
+
+def test_filter_by_mode():
+    from src.bot.services.scan_service import ScanService
+    tickers = ["AAPL", "NVDA", "BTC-USD", "ETH-USD"]
+
+    assert ScanService.filter_by_mode(tickers, "ALL") == tickers
+    assert ScanService.filter_by_mode(tickers, None) == tickers
+    assert ScanService.filter_by_mode(tickers, "US") == ["AAPL", "NVDA"]
+    assert ScanService.filter_by_mode(tickers, "CRYPTO") == ["BTC-USD", "ETH-USD"]

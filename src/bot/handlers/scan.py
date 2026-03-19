@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from telegram import Update
 from telegram.ext import ContextTypes
 from src.bot.handlers import get_user_service, get_scan_service, get_report_formatter
+from src.bot.services.scan_service import ScanService
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,8 @@ async def scan_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tickers = [context.args[0].upper()]
     else:
         tickers = user_svc.get_watchlist(user.id)
+        # Apply scan mode filter (US/CRYPTO/ALL)
+        tickers = ScanService.filter_by_mode(tickers, user.scan_mode)
 
     if not tickers:
         await update.message.reply_text("No tickers to scan. Use /watch AAPL NVDA or /presets to add some.")

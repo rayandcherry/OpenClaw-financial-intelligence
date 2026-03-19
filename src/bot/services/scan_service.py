@@ -19,6 +19,17 @@ class ScanService:
         self._executor.shutdown(wait=True, cancel_futures=False)
         logger.info("Scan service executor shut down")
 
+    @staticmethod
+    def filter_by_mode(tickers: list[str], scan_mode: str) -> list[str]:
+        """Filter tickers by scan mode (US/CRYPTO/ALL)."""
+        if not scan_mode or scan_mode == "ALL":
+            return tickers
+        if scan_mode == "CRYPTO":
+            return [t for t in tickers if t.endswith("-USD")]
+        if scan_mode == "US":
+            return [t for t in tickers if not t.endswith("-USD")]
+        return tickers
+
     def dedupe_tickers(self, user_tickers: dict[int, list[str]]) -> list[str]:
         unique = set()
         for tickers in user_tickers.values():
