@@ -31,7 +31,9 @@ async def scan_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     started_at = datetime.now(timezone.utc)
 
     try:
-        signals = await scan_svc.scan_for_user(user_id=user.id, tickers=tickers)
+        signals = await scan_svc.scan_for_user(
+            user_id=user.id, tickers=tickers, strategies=user.strategies
+        )
 
         if signals is None:
             user_svc.log_scan(

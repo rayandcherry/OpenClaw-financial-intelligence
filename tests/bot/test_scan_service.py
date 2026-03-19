@@ -81,3 +81,28 @@ async def test_batch_scan(scan_svc, mock_redis):
 
     assert len(results[1]) == 2
     assert len(results[2]) == 1
+
+
+def test_filter_by_strategies(scan_svc):
+    signals = [
+        {"ticker": "AAPL", "strategy": "trinity"},
+        {"ticker": "NVDA", "strategy": "panic"},
+        {"ticker": "MSFT", "strategy": "2B_Reversal"},
+    ]
+    # Only trinity enabled
+    filtered = scan_svc._filter_by_strategies(signals, ["TRINITY"])
+    assert len(filtered) == 1
+    assert filtered[0]["ticker"] == "AAPL"
+
+    # 2B enabled (matches 2B_Reversal)
+    filtered = scan_svc._filter_by_strategies(signals, ["2B"])
+    assert len(filtered) == 1
+    assert filtered[0]["ticker"] == "MSFT"
+
+    # All enabled
+    filtered = scan_svc._filter_by_strategies(signals, ["TRINITY", "PANIC", "2B"])
+    assert len(filtered) == 3
+
+    # None means no filter
+    filtered = scan_svc._filter_by_strategies(signals, None)
+    assert len(filtered) == 3

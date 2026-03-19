@@ -49,8 +49,19 @@ class ScanService:
             signal["news"] = news_map.get(signal["ticker"])
         return signals
 
+    def _filter_by_strategies(self, signals: list[dict], strategies: list[str] | None) -> list[dict]:
+        """Filter signals to only include user's enabled strategies."""
+        if not strategies:
+            return signals
+        # Normalize: strategy names in signals are lowercase ("trinity", "panic", "2B_Reversal")
+        allowed = {s.lower() for s in strategies}
+        # Also map "2b" -> matches "2b_reversal"
+        return [s for s in signals if s.get("strategy", "").lower() in allowed
+                or any(s.get("strategy", "").lower().startswith(a.lower()) for a in strategies)]
+
     async def scan_for_user(
-        self, user_id: int, tickers: list[str], triggered_by: str = "manual"
+        self, user_id: int, tickers: list[str], strategies: list[str] | None = None,
+        triggered_by: str = "manual",
     ) -> list[dict] | None:
         if not await self.redis.check_rate_limit(user_id):
             return None
@@ -60,6 +71,7 @@ class ScanService:
 
         try:
             signals = await self._run_scan(tickers)
+            signals = self._filter_by_strategies(signals, strategies)
             signals = await self._enrich_signals(signals)
             return signals
         finally:
