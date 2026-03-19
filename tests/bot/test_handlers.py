@@ -85,6 +85,28 @@ async def test_scan_handler_returns_report():
 
 
 @pytest.mark.asyncio
+async def test_watch_handler_validates_and_adds():
+    from src.bot.handlers.watchlist import watch_handler
+
+    update = make_update("/watch AAPL FAKE")
+    ctx = make_context(args=["AAPL", "FAKE"])
+
+    mock_user_svc = MagicMock()
+    mock_user_svc.get_by_telegram_id.return_value = MagicMock(id=1)
+    mock_user_svc.add_tickers.return_value = []
+
+    with patch("src.bot.handlers.watchlist.get_user_service", return_value=mock_user_svc):
+        with patch("src.bot.handlers.watchlist._validate_ticker", side_effect=[True, False]):
+            await watch_handler(update, ctx)
+
+    # Only AAPL should be added (FAKE failed validation)
+    mock_user_svc.add_tickers.assert_called_once_with(1, ["AAPL"])
+    reply_text = update.message.reply_text.call_args[0][0]
+    assert "Added: AAPL" in reply_text
+    assert "Not found: FAKE" in reply_text
+
+
+@pytest.mark.asyncio
 async def test_help_handler():
     from src.bot.handlers.help import help_handler
 

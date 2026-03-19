@@ -1,7 +1,13 @@
+import asyncio
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from src.bot.handlers import get_user_service
 from src.config import PRESET_WATCHLISTS
+
+logger = logging.getLogger(__name__)
+_validate_pool = ThreadPoolExecutor(max_workers=3)
 
 
 async def watchlist_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -26,6 +32,22 @@ async def watchlist_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+def _check_ticker(ticker: str) -> bool:
+    """Validate ticker exists on yfinance. Runs in thread pool."""
+    try:
+        from src.core.data_fetcher import fetch_data
+        result = fetch_data(ticker, "5d")
+        return result is not None and not result.empty
+    except Exception:
+        return False
+
+
+async def _validate_ticker(ticker: str) -> bool:
+    """Async wrapper for ticker validation."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_validate_pool, _check_ticker, ticker)
+
+
 async def watch_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_svc = get_user_service()
     user = user_svc.get_by_telegram_id(update.effective_user.id)
@@ -38,14 +60,25 @@ async def watch_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /watch AAPL NVDA BTC-USD")
         return
 
-    rejected = user_svc.add_tickers(user.id, [t.upper() for t in tickers])
-    added = [t.upper() for t in tickers if t.upper() not in rejected]
+    # Validate tickers against yfinance
+    upper_tickers = [t.upper() for t in tickers]
+    valid, invalid = [], []
+    for t in upper_tickers:
+        if await _validate_ticker(t):
+            valid.append(t)
+        else:
+            invalid.append(t)
 
     msg_parts = []
-    if added:
-        msg_parts.append(f"Added: {', '.join(added)}")
-    if rejected:
-        msg_parts.append(f"Watchlist full (50 max), couldn't add: {', '.join(rejected)}")
+    if valid:
+        rejected = user_svc.add_tickers(user.id, valid)
+        added = [t for t in valid if t not in rejected]
+        if added:
+            msg_parts.append(f"Added: {', '.join(added)}")
+        if rejected:
+            msg_parts.append(f"Watchlist full (50 max), couldn't add: {', '.join(rejected)}")
+    if invalid:
+        msg_parts.append(f"Not found: {', '.join(invalid)} — check the symbol and try again.")
     if not msg_parts:
         msg_parts.append("Those tickers are already in your watchlist.")
 
