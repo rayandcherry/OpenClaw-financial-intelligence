@@ -1,16 +1,5 @@
 import pytest
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.orm import Session
-from src.bot.db.models import Base, User, UserWatchlist, UserSchedule, ScanLog
-
-
-@pytest.fixture
-def db():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-    engine.dispose()
+from src.bot.db.models import User, UserWatchlist, UserSchedule, ScanLog
 
 
 def test_create_user(db):
