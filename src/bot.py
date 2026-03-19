@@ -115,6 +115,7 @@ def main():
 
     async def post_shutdown(application):
         scheduler.shutdown()
+        scan_service.shutdown()
         await redis_client.close()
         db_session.close()
         logger.info("Shutdown complete")

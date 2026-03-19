@@ -8,12 +8,16 @@ from src.core.news import get_market_news
 
 logger = logging.getLogger(__name__)
 
-_executor = ThreadPoolExecutor(max_workers=10)
-
 
 class ScanService:
     def __init__(self, redis_client):
         self.redis = redis_client
+        self._executor = ThreadPoolExecutor(max_workers=10)
+
+    def shutdown(self):
+        """Shut down the thread pool, waiting for in-flight scans to finish."""
+        self._executor.shutdown(wait=True, cancel_futures=False)
+        logger.info("Scan service executor shut down")
 
     def dedupe_tickers(self, user_tickers: dict[int, list[str]]) -> list[str]:
         unique = set()
@@ -22,10 +26,10 @@ class ScanService:
         return list(unique)
 
     async def _run_scan(self, tickers: list[str]) -> list[dict]:
-        return await asyncio.get_running_loop().run_in_executor(_executor, scan_market, tickers)
+        return await asyncio.get_running_loop().run_in_executor(self._executor, scan_market, tickers)
 
     async def _fetch_news(self, ticker: str) -> str:
-        return await asyncio.get_running_loop().run_in_executor(_executor, get_market_news, ticker)
+        return await asyncio.get_running_loop().run_in_executor(self._executor, get_market_news, ticker)
 
     async def _safe_fetch_news(self, ticker: str) -> tuple[str, str | None]:
         """Fetch news for a ticker, returning (ticker, news_text) or (ticker, None) on failure."""
