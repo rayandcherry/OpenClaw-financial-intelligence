@@ -30,6 +30,7 @@ from bot.handlers.schedule import schedule_handler, pause_handler, resume_handle
 from bot.handlers.settings import settings_handler, lang_handler, mode_handler, strategies_handler
 from bot.handlers.help import help_handler
 from bot.handlers.status import status_handler
+from bot.handlers.last import last_handler
 from bot.health import start_health_server
 
 logging.basicConfig(
@@ -89,6 +90,7 @@ def main():
     app.add_handler(CommandHandler("presets", presets_handler))
     app.add_handler(CommandHandler("scan", scan_handler))
     app.add_handler(CommandHandler("status", status_handler))
+    app.add_handler(CommandHandler("last", last_handler))
     app.add_handler(CommandHandler("schedule", schedule_handler))
     app.add_handler(CommandHandler("pause", pause_handler))
     app.add_handler(CommandHandler("resume", resume_handler))

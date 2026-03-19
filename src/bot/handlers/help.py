@@ -24,6 +24,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/mode US|CRYPTO|ALL — Set scan mode\n"
         "/strategies — Toggle strategies\n\n"
         "/status — Account overview and scan history\n"
+        "/last — Show your most recent scan report\n"
         "/help — This message"
     )
     await update.message.reply_text(text, parse_mode="Markdown")

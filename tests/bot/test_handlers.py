@@ -204,3 +204,45 @@ async def test_status_handler_shows_overview():
     assert "2 tickers" in reply_text
     assert "4/5" in reply_text
     assert "12" in reply_text
+
+
+@pytest.mark.asyncio
+async def test_last_handler_shows_report():
+    from src.bot.handlers.last import last_handler
+    from datetime import datetime, timezone
+
+    update = make_update("/last")
+    ctx = make_context()
+
+    mock_scan_log = MagicMock()
+    mock_scan_log.report_text = "📊 *OpenClaw Scan Report*\nTest signals here"
+    mock_scan_log.finished_at = datetime(2026, 3, 19, 8, 0, tzinfo=timezone.utc)
+
+    mock_user_svc = MagicMock()
+    mock_user_svc.get_by_telegram_id.return_value = MagicMock(id=1)
+    mock_user_svc.session.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = mock_scan_log
+
+    with patch("src.bot.handlers.last.get_user_service", return_value=mock_user_svc):
+        await last_handler(update, ctx)
+
+    reply_text = update.message.reply_text.call_args[0][0]
+    assert "Last scan" in reply_text
+    assert "Test signals" in reply_text
+
+
+@pytest.mark.asyncio
+async def test_last_handler_no_reports():
+    from src.bot.handlers.last import last_handler
+
+    update = make_update("/last")
+    ctx = make_context()
+
+    mock_user_svc = MagicMock()
+    mock_user_svc.get_by_telegram_id.return_value = MagicMock(id=1)
+    mock_user_svc.session.query.return_value.filter_by.return_value.order_by.return_value.first.return_value = None
+
+    with patch("src.bot.handlers.last.get_user_service", return_value=mock_user_svc):
+        await last_handler(update, ctx)
+
+    reply_text = update.message.reply_text.call_args[0][0]
+    assert "No previous" in reply_text
