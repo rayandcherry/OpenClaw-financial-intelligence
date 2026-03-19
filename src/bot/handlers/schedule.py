@@ -26,14 +26,25 @@ async def schedule_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    MAX_SCHEDULES = 4
+
+    if len(context.args) > MAX_SCHEDULES:
+        await update.message.reply_text(f"Maximum {MAX_SCHEDULES} scan times allowed.")
+        return
+
     times = []
     for arg in context.args:
         try:
             parts = arg.split(":")
+            if len(parts) != 2:
+                raise ValueError("need HH:MM")
             times.append(dt_time(int(parts[0]), int(parts[1])))
         except (ValueError, IndexError):
-            await update.message.reply_text(f"Invalid time format: {arg}. Use HH:MM (e.g., 8:00)")
+            await update.message.reply_text(f"Invalid time: {arg}. Use HH:MM format (e.g., 8:00, 20:00)")
             return
+
+    # Deduplicate
+    times = list(dict.fromkeys(times))
 
     user_svc.set_schedules(user.id, times)
     time_strs = ", ".join(t.strftime("%H:%M") for t in times)
