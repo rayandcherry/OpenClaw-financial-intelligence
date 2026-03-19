@@ -43,9 +43,9 @@ docker compose up -d  # starts Postgres + Redis
 # Run bot
 python src/bot.py  # requires TELEGRAM_BOT_TOKEN, DATABASE_URL, REDIS_URL
 
-# Run bot tests (all 43+)
-PYTHONPATH=src pytest tests/bot/ -v
-PYTHONPATH=src pytest tests/bot/test_handlers.py::test_scan_handler_returns_report -v  # single test
+# Run bot tests (48+, pythonpath configured in pytest.ini)
+pytest tests/bot/ -v
+pytest tests/bot/test_handlers.py::test_scan_handler_returns_report -v  # single test
 ```
 
 ## Architecture
