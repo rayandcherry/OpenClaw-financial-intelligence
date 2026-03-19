@@ -15,5 +15,19 @@ services:
     ports:
       - "6379:6379"
 
+  # Uncomment to run the bot in Docker (requires .env with TELEGRAM_BOT_TOKEN, GEMINI_API_KEY)
+  # bot:
+  #   build: .
+  #   env_file: .env
+  #   environment:
+  #     DATABASE_URL: postgresql+asyncpg://openclaw:localdev@postgres:5432/openclaw
+  #     DATABASE_SYNC_URL: postgresql+psycopg2://openclaw:localdev@postgres:5432/openclaw
+  #     REDIS_URL: redis://redis:6379
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   ports:
+  #     - "8080:8080"
+
 volumes:
   pgdata:
