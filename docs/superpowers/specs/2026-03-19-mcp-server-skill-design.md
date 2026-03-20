@@ -8,7 +8,7 @@ Wrap OpenClaw's scanner, backtester, and position tracker as an MCP Server so an
 
 **Transport:** stdio (local). SSE can be added later for remote access.
 
-**Persistence:** `data/positions.json` (existing TrackerService, no database required).
+**Persistence:** `data/positions.json` via TrackerService. Note: TrackerService currently holds positions in-memory only — JSON load/save helpers exist in `src/track.py` but not in the service itself. MCP server must add `load_positions()` / `save_positions()` to TrackerService so positions persist across sessions.
 
 **New dependency:** `mcp[cli]` only.
 
@@ -120,7 +120,7 @@ Single process. MCP server directly calls existing modules — no bot layer, no 
 - Parameters:
   - `ticker` (string, required)
 - Returns: `{status: "removed", ticker, final_pnl}`
-- Wraps: `TrackerService` position removal
+- Note: TrackerService has no remove method — must add `remove_position(ticker)` that calculates final P&L and removes from positions dict + saves to JSON
 
 ## Skill: openclaw-trader
 
