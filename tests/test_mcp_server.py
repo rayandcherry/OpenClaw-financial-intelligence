@@ -216,3 +216,56 @@ def test_handle_position_remove_nonexistent(mcp_tracker):
         from src.mcp_server import handle_position_remove
         result = handle_position_remove(ticker="FAKE")
     assert "error" in result
+
+
+def test_full_workflow_integration(mcp_tracker):
+    """Integration: scan → backtest → size → add → list → remove."""
+    signal = {
+        "ticker": "AAPL", "strategy": "trinity", "confidence": 85,
+        "price": 150.0, "plan": {"stop_loss": 140, "take_profit": 170},
+        "stats": {"total": {"wr": 62, "count": 47}}, "side": "LONG",
+        "date": "2026-03-29", "metrics": {}
+    }
+
+    mock_df = pd.DataFrame({"Close": [150.0], "High": [155.0], "Low": [145.0], "ATR_14": [3.5]})
+
+    with patch("src.mcp_server._tracker", mcp_tracker):
+        with patch("src.mcp_server.scan_market", return_value=[signal]):
+            from src.mcp_server import handle_scan, handle_backtest, handle_position_size
+            from src.mcp_server import handle_position_add, handle_position_list, handle_position_remove
+
+            # Step 1: Scan
+            scan_result = handle_scan(tickers=["AAPL"])
+            assert scan_result["count"] == 1
+
+        # Step 2: Backtest
+        with patch("src.mcp_server.Backtester") as MockBT:
+            instance = MagicMock()
+            instance.get_summary_metrics.return_value = {"roi": 15, "wr": 62, "trades": 47, "pnl": 15000}
+            MockBT.return_value = instance
+            bt_result = handle_backtest(ticker="AAPL", period="3y")
+            assert bt_result["win_rate"] == 62
+
+        # Step 3: Size
+        size_result = handle_position_size(
+            ticker="AAPL", entry_price=150, stop_loss=140,
+            account_balance=100000, win_rate=62
+        )
+        assert size_result["qty"] > 0
+
+        # Step 5: Add (Step 4 is user confirmation — not testable)
+        with patch("src.tracker.service.fetch_data", return_value=mock_df):
+            with patch("src.tracker.service.calculate_indicators", return_value=mock_df):
+                add_result = handle_position_add(ticker="AAPL", entry_price=150, qty=size_result["qty"], side="LONG", tp1=170)
+        assert add_result["status"] == "added"
+
+        # Step 6: List
+        list_result = handle_position_list()
+        assert list_result["count"] == 1
+
+        # Cleanup: Remove
+        remove_result = handle_position_remove(ticker="AAPL")
+        assert remove_result["status"] == "removed"
+
+        final_list = handle_position_list()
+        assert final_list["count"] == 0
