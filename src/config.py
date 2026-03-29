@@ -68,3 +68,23 @@ STRATEGY_PARAMS = {
         "sl_limit_pct": 0.05
     }
 }
+
+# --- Bot Configuration ---
+BOT_CONFIG = {
+    "watchlist_max": 50,
+    "rate_limit_scans_per_hour": 10,
+    "scan_lock_ttl_seconds": 300,
+    "backtest_cache_ttl_days": 7,
+    "default_schedule_times": ["08:00", "20:00"],
+    "default_lang": "EN",
+    "default_scan_mode": "ALL",
+    "default_strategies": ["TRINITY", "PANIC", "2B"],
+}
+
+PRESET_WATCHLISTS = {
+    "SP500 Top 20": ["AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "META", "BRK-B", "UNH", "XOM", "JNJ",
+                      "JPM", "V", "PG", "MA", "HD", "CVX", "MRK", "ABBV", "LLY", "PEP"],
+    "FAANG+": ["META", "AAPL", "AMZN", "NVDA", "GOOGL", "MSFT", "TSLA", "NFLX"],
+    "Crypto Major": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD",
+                      "AVAX-USD", "DOT-USD", "MATIC-USD", "LINK-USD"],
+}

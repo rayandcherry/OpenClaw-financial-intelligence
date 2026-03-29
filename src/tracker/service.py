@@ -1,3 +1,5 @@
+import json
+import os
 from datetime import datetime
 from src.tracker.position import PositionManager
 from src.tracker.risk import CapitalAllocator
@@ -9,6 +11,7 @@ class TrackerService:
         self.positions = {} # {ticker: PositionManager}
         self.risk_manager = CapitalAllocator(initial_balance)
         self.balance = initial_balance
+        self.positions_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "positions.json")
 
     def add_position(self, ticker, entry_price, qty, side='LONG', tp1=None):
         if ticker in self.positions:
@@ -77,5 +80,57 @@ class TrackerService:
                 est_tax = pos.unrealized_pnl * 0.45
                 total_tax += est_tax
                 tax_report.append(f"{ticker}: Profit ${pos.unrealized_pnl:.2f} -> Tax Reserve ${est_tax:.2f}")
-        
+
         return "\n".join(tax_report), total_tax
+
+    def save_positions(self):
+        os.makedirs(os.path.dirname(self.positions_file), exist_ok=True)
+        data = []
+        for ticker, pm in self.positions.items():
+            data.append({
+                "ticker": ticker,
+                "entry_price": pm.entry_price,
+                "qty": pm.qty,
+                "side": pm.side,
+                "tp1": pm.tp1,
+                "sl": pm.current_sl,
+                "breakeven": pm.is_breakeven_active,
+                "tp1_hit": pm.tp1_hit,
+            })
+        with open(self.positions_file, "w") as f:
+            json.dump(data, f, indent=2)
+
+    def load_positions(self):
+        if not os.path.exists(self.positions_file):
+            return
+        try:
+            with open(self.positions_file) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return
+        for item in data:
+            self.add_position(
+                ticker=item["ticker"],
+                entry_price=item["entry_price"],
+                qty=item["qty"],
+                side=item.get("side", "LONG"),
+                tp1=item.get("tp1"),
+            )
+            pm = self.positions.get(item["ticker"])
+            if pm:
+                if item.get("sl"):
+                    pm.current_sl = item["sl"]
+                if item.get("breakeven"):
+                    pm.is_breakeven_active = True
+                if item.get("tp1_hit"):
+                    pm.tp1_hit = True
+
+    def remove_position(self, ticker: str) -> dict:
+        ticker = ticker.upper()
+        if ticker not in self.positions:
+            return {"error": f"No open position for {ticker}"}
+        pm = self.positions[ticker]
+        pnl = pm.unrealized_pnl if hasattr(pm, 'unrealized_pnl') else 0.0
+        del self.positions[ticker]
+        self.save_positions()
+        return {"status": "removed", "ticker": ticker, "final_pnl": round(pnl, 2)}

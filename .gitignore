@@ -38,3 +38,5 @@ data/cache/
 .coverage
 htmlcov/
 tests/data/
+
+.superpowers/
