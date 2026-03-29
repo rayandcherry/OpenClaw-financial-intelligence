@@ -21,6 +21,9 @@ _cache = BacktestCache()
 
 mcp = FastMCP("openclaw")
 
+_tracker = TrackerService(initial_balance=100000)
+_tracker.load_positions()
+
 
 def _filter_tickers_by_mode(tickers, mode):
     if not mode or mode == "ALL":
@@ -131,6 +134,153 @@ def handle_backtest(ticker, period="3y", strategy=None):
         }
     except Exception as e:
         return {"error": f"Backtest failed for {ticker}: {str(e)}"}
+
+
+@mcp.tool()
+def indicators(ticker: str, period: str = "1y") -> dict:
+    """Get current technical indicators for a ticker."""
+    return handle_indicators(ticker=ticker, period=period)
+
+
+def handle_indicators(ticker, period="1y"):
+    try:
+        df = fetch_data(ticker, period)
+        if df is None or df.empty:
+            return {"error": f"No market data available for {ticker}"}
+        df = calculate_indicators(df)
+        latest = df.iloc[-1]
+        return {
+            "ticker": ticker,
+            "price": round(float(latest["Close"]), 2),
+            "sma_200": round(float(latest.get("SMA_200", 0)), 2),
+            "ema_50": round(float(latest.get("EMA_50", 0)), 2),
+            "rsi_14": round(float(latest.get("RSI_14", 0)), 2),
+            "bollinger_lower": round(float(latest.get("BBL_20_2.0", 0)), 2),
+            "macd": round(float(latest.get("MACD", 0)), 4),
+            "macd_signal": round(float(latest.get("MACD_Signal", 0)), 4),
+            "macd_hist": round(float(latest.get("MACD_Hist", 0)), 4),
+            "atr_14": round(float(latest.get("ATR_14", 0)), 2),
+            "volume_ratio": round(float(latest.get("RVOL", 0)), 2),
+            "regime": str(latest.get("Regime", "Unknown")),
+        }
+    except Exception as e:
+        return {"error": f"Indicators failed for {ticker}: {str(e)}"}
+
+
+@mcp.tool()
+def position_size(
+    ticker: str, entry_price: float, stop_loss: float,
+    account_balance: float, win_rate: float = 50.0, reward_ratio: float = 2.0
+) -> dict:
+    """Calculate position size using Kelly Criterion with VaR limits."""
+    return handle_position_size(
+        ticker=ticker, entry_price=entry_price, stop_loss=stop_loss,
+        account_balance=account_balance, win_rate=win_rate, reward_ratio=reward_ratio
+    )
+
+
+def handle_position_size(ticker, entry_price, stop_loss, account_balance, win_rate=50.0, reward_ratio=2.0):
+    try:
+        allocator = CapitalAllocator(account_balance)
+        result = allocator.calculate_position_size(
+            ticker=ticker, entry_price=entry_price, stop_loss=stop_loss,
+            win_rate_pct=win_rate, reward_ratio=reward_ratio
+        )
+        if not isinstance(result, dict):
+            return {"error": "Negative edge — Kelly suggests not trading this setup", "qty": 0}
+        return {
+            "ticker": ticker,
+            "qty": result["qty"],
+            "max_loss": result["max_loss"],
+            "kelly_pct": result["kelly_suggestion_pct"],
+            "constraint": result["constraint"],
+        }
+    except Exception as e:
+        return {"error": f"Position sizing failed: {str(e)}"}
+
+
+@mcp.tool()
+def position_add(ticker: str, entry_price: float, qty: float, side: str = "LONG", tp1: float = None) -> dict:
+    """Record a new position."""
+    return handle_position_add(ticker=ticker, entry_price=entry_price, qty=qty, side=side, tp1=tp1)
+
+
+def handle_position_add(ticker, entry_price, qty, side="LONG", tp1=None):
+    try:
+        ticker = ticker.upper()
+        if ticker in _tracker.positions:
+            return {"error": f"Position already open for {ticker}"}
+        _tracker.add_position(ticker, entry_price, qty, side=side, tp1=tp1)
+        _tracker.save_positions()
+        pm = _tracker.positions[ticker]
+        return {
+            "status": "added",
+            "ticker": ticker,
+            "entry_price": entry_price,
+            "qty": qty,
+            "side": side,
+            "initial_sl": round(pm.current_sl, 2),
+        }
+    except Exception as e:
+        return {"error": f"Failed to add position: {str(e)}"}
+
+
+@mcp.tool()
+def position_list() -> dict:
+    """List all open positions with current P&L."""
+    return handle_position_list()
+
+
+def handle_position_list():
+    positions = []
+    for ticker, pm in _tracker.positions.items():
+        positions.append({
+            "ticker": ticker,
+            "entry_price": pm.entry_price,
+            "qty": pm.qty,
+            "side": pm.side,
+            "current_sl": round(pm.current_sl, 2),
+            "pnl": round(pm.unrealized_pnl, 2) if hasattr(pm, 'unrealized_pnl') else 0.0,
+            "health": "ACTIVE",
+        })
+    return {"positions": positions, "count": len(positions)}
+
+
+@mcp.tool()
+def position_update() -> dict:
+    """Update all positions with latest market data, check for triggers."""
+    return handle_position_update()
+
+
+def handle_position_update():
+    try:
+        status_report, alerts = _tracker.update_market()
+        _tracker.save_positions()
+        updates = []
+        for ticker, pm in _tracker.positions.items():
+            updates.append({
+                "ticker": ticker,
+                "price": round(pm.current_price, 2) if hasattr(pm, 'current_price') else 0,
+                "sl": round(pm.current_sl, 2),
+                "pnl": round(pm.unrealized_pnl, 2) if hasattr(pm, 'unrealized_pnl') else 0,
+            })
+        return {"updates": updates, "alerts": alerts, "status_report": status_report}
+    except Exception as e:
+        return {"error": f"Position update failed: {str(e)}"}
+
+
+@mcp.tool()
+def position_remove(ticker: str) -> dict:
+    """Close and remove a position."""
+    return handle_position_remove(ticker=ticker)
+
+
+def handle_position_remove(ticker):
+    try:
+        result = _tracker.remove_position(ticker)
+        return result
+    except Exception as e:
+        return {"error": f"Failed to remove position: {str(e)}"}
 
 
 if __name__ == "__main__":
