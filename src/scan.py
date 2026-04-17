@@ -71,10 +71,12 @@ def main():
             f"Bull: {bull_wr}% | "
             f"Bear: {bear_wr}%"
         )
-        
-        date_str = c.get('date', 'N/A')[:10] # Shorten timestamp
+
+        date_str = c.get('date', 'N/A')[:10]  # Shorten timestamp
         entry_summary = f"- **{c['ticker']}** ({c['strategy'].upper()}): Price ${c['price']:.2f} [{date_str}] | Confidence: {c['confidence']} | {metric_str}\n"
-        entry_summary += f"  - Backtest: {backtest_str}\n"
+        # Quick historical check: same strategy rules, 20-day forward, fixed ATR SL/TP.
+        # Sample-level win-rate; no portfolio sizing, no trailing stop.
+        entry_summary += f"  - Quick Regime Check (20d forward, fixed ATR SL/TP): {backtest_str}\n"
         
         # Regression Simulation
         print(f"🔄 Running Regression Sim for {c['ticker']}...")
@@ -94,8 +96,10 @@ def main():
         
         sim_str = f"ROI: {sim_stats['roi']}% | WR: {sim_stats['wr']}% | Trades: {sim_stats['trades']} | PnL: ${sim_stats['pnl']}"
         if from_cache: sim_str += " (Cached)"
-        
-        entry_summary += f"  - Simulation (Regression Test 3y): {sim_str}\n"
+
+        # Full portfolio simulation: dynamic SL/TP, trailing, TP1 ladder, next-bar fills.
+        # Different methodology than the Quick Regime Check above — numbers not directly comparable.
+        entry_summary += f"  - Portfolio Sim 3y (dynamic SL, trailing, ladder, next-bar fill): {sim_str}\n"
         entry_summary += f"  - Plan: {plan_str}\n"
         
         # Append to main summary and log

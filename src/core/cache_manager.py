@@ -1,8 +1,25 @@
+import hashlib
 import json
 import os
 from datetime import datetime, timedelta
 
+try:
+    from src.config import STRATEGY_PARAMS, RISK_PARAMS
+except ImportError:
+    from config import STRATEGY_PARAMS, RISK_PARAMS
+
 CACHE_FILE = "data/cache/backtest_stats.json"
+
+
+def _param_version() -> str:
+    """Short hash of the current strategy + risk parameters.
+
+    Any change to STRATEGY_PARAMS or RISK_PARAMS invalidates every cache entry
+    automatically — readers won't be served results from a different strategy.
+    """
+    blob = json.dumps([STRATEGY_PARAMS, RISK_PARAMS], sort_keys=True).encode()
+    return hashlib.sha1(blob).hexdigest()[:8]
+
 
 class BacktestCache:
     def __init__(self, ttl_days=7):
@@ -30,26 +47,27 @@ class BacktestCache:
         except IOError as e:
             print(f"Warning: Failed to save cache: {e}")
 
+    def _make_key(self, ticker: str, period: str) -> str:
+        return f"{ticker}_{period}_{_param_version()}"
+
     def get(self, ticker, period):
         """Returns cached stats if valid, else None."""
-        key = f"{ticker}_{period}"
-        entry = self.cache.get(key)
-        
+        entry = self.cache.get(self._make_key(ticker, period))
+
         if not entry:
             return None
-            
+
         # Check TTL
         cached_date = datetime.fromisoformat(entry['timestamp'])
         if datetime.now() - cached_date > timedelta(days=self.ttl_days):
-            return None # Expired
-            
+            return None  # Expired
+
         return entry['stats']
 
     def set(self, ticker, period, stats):
         """Saves stats to cache."""
-        key = f"{ticker}_{period}"
-        self.cache[key] = {
+        self.cache[self._make_key(ticker, period)] = {
             "timestamp": datetime.now().isoformat(),
-            "stats": stats
+            "stats": stats,
         }
         self._save_cache()

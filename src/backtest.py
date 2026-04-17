@@ -42,35 +42,38 @@ class Portfolio:
         return equity
 
     def calculate_size(self, price, stop_loss, confidence, current_equity, risk_params=None):
-        if price <= 0: return 0
-        
+        if price <= 0:
+            return 0
+
         # 1. Risk Management: Default 2%, or injected
         base_risk_pct = 0.02
         max_alloc_pct = 0.10
-        
+
         if risk_params:
             base_risk_pct = risk_params.get('risk_per_trade', 0.02)
             max_alloc_pct = risk_params.get('max_position_size', 0.10)
-            
-        risk_per_trade = current_equity * base_risk_pct
-        
+
+        # Confidence multiplier — scales ALLOCATION inside the risk budget.
+        # Low conf shrinks the position, high conf does NOT exceed base risk.
+        # (Previous impl allowed 80-conf → 1.6x = 3.2% real risk, violating the
+        # stated "2% max risk per trade" invariant.)
+        multiplier = min(1.0, confidence / 100.0)
+
+        effective_risk_pct = base_risk_pct * multiplier
+        risk_per_trade = current_equity * effective_risk_pct
+
         # Risk per share
         risk_per_share = abs(price - stop_loss)
-        if risk_per_share == 0: return 0
-        
-        base_qty = risk_per_trade / risk_per_share
-        
-        # 2. Confidence Multiplier (Confidence / 50)
-        # e.g., 80 conf -> 1.6x
-        # e.g., 20 conf -> 0.4x
-        multiplier = confidence / 50.0
-        final_qty = base_qty * multiplier
-        
-        # 3. Max Allocation Rule
+        if risk_per_share == 0:
+            return 0
+
+        final_qty = risk_per_trade / risk_per_share
+
+        # 3. Max Allocation Rule (notional cap)
         max_cost = current_equity * max_alloc_pct
         if (final_qty * price) > max_cost:
             final_qty = max_cost / price
-            
+
         return max(0.0, final_qty)
 
     def open_position(self, ticker, price, qty, sl, tp, strategy, date, side="LONG", atr=None, risk_params=None):
@@ -216,73 +219,81 @@ class Backtester:
                              self.portfolio.close_position(ticker, exit_px, current_date, reason="Take Profit 1 (Ladder)", qty_to_close=pos.qty * 0.5)
             
             # --- B. Check Entries (Signals) ---
+            # Signal is detected on bar t (using data up to t inclusive), but
+            # EXECUTION happens at bar t+1 Open — mirrors reality (EOD signal →
+            # next session fill) and removes the "same-bar close signal + fill"
+            # lookahead bias.
             for ticker in self.tickers:
                 if ticker in self.portfolio.positions:
-                    continue # Already holding
-                
+                    continue  # Already holding
+
                 df = self.data_store.get(ticker)
                 if df is None or current_date not in df.index:
                     continue
-                
+
+                # Need a next bar to execute on; skip if today is the last bar.
+                idx_today = df.index.get_loc(current_date)
+                if idx_today >= len(df) - 1:
+                    continue
+
                 df_context = df.loc[:current_date]
                 row = df.loc[current_date]
-                
-                if row['Close'] < 5: continue 
-                
+
+                if row['Close'] < 5:
+                    continue
+
                 scan_res = None
-                
+
                 # 1. Trinity
                 if "TRINITY" in strategies:
-                    # Pass injected params if available
                     t_params = strategy_params.get('TRINITY') if strategy_params else None
                     trinity = check_trinity_setup(row, df_context, params=t_params)
-                    if trinity: scan_res = trinity
-                
+                    if trinity:
+                        scan_res = trinity
+
                 # 2. Panic
                 if not scan_res and "PANIC" in strategies:
                     p_params = strategy_params.get('PANIC') if strategy_params else None
                     panic = check_panic_setup(row, df_context, params=p_params)
-                    if panic: scan_res = panic
-                
+                    if panic:
+                        scan_res = panic
+
                 # 3. 2B
                 if not scan_res and "2B" in strategies:
                     _2b = check_2b_setup(row, df_context)
-                    if _2b: scan_res = _2b
+                    if _2b:
+                        scan_res = _2b
 
-                    
-                # Execute Entry
+                # Execute Entry on NEXT bar's Open
                 if scan_res:
                     if scan_res['confidence'] < min_confidence:
                         continue
-                        
+
+                    next_row = df.iloc[idx_today + 1]
+                    next_date = df.index[idx_today + 1]
+                    fill_price = next_row['Open']
+                    if pd.isna(fill_price) or fill_price <= 0:
+                        continue
+
                     confidence = scan_res['confidence']
                     plan = scan_res['plan']
                     sl = plan['stop_loss']
                     tp = plan['take_profit']
-                    price = row['Close']
-                    
+
                     # Updates current equity for sizing
                     curr_eq = self.portfolio.current_equity(current_prices)
-                    
-                    qty = self.portfolio.calculate_size(price, sl, confidence, curr_eq, risk_params=risk_params)
-                    
+
+                    qty = self.portfolio.calculate_size(fill_price, sl, confidence, curr_eq, risk_params=risk_params)
+
                     if qty > 0:
-                        atr = row.get('ATR_14', price * 0.05)
-                        
-                        # INJECT RISK PARAMS into PositionManager init via Portfolio proxy if needed
-                        # But Portfolio.open_position instantiates PositionManager.
-                        # We need to pass risk_params to Portfolio.open_position
-                        
-                        success = self.portfolio.open_position(
-                            ticker, price, qty, sl, tp, 
-                            scan_res['strategy'], current_date,
+                        atr = next_row.get('ATR_14', fill_price * 0.05)
+                        self.portfolio.open_position(
+                            ticker, fill_price, qty, sl, tp,
+                            scan_res['strategy'], next_date,
                             side=scan_res.get('side', 'LONG'),
                             atr=atr,
                             risk_params=risk_params
                         )
-                        if success:
-                            # print(f"[{current_date.date()}] Bought {ticker} ({scan_res['strategy']}) @ {price} | Qty: {qty}")
-                            pass
 
             # End of Day Tracking
             self.portfolio.equity_curve.append({

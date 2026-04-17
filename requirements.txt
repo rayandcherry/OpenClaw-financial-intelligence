@@ -1,7 +1,7 @@
 yfinance
 pandas
 google-genai
-duckduckgo-search
+ddgs
 requests
 python-dotenv
 python-telegram-bot>=21.0

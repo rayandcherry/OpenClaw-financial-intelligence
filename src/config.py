@@ -26,17 +26,20 @@ SP500_TOP_200 = [
     "RTX", "LOW", "COP", "BKNG", "T", "ELV", "SYK", "TJX", "PGR", "LRCX",
     "BLK", "ETN", "BSX", "VRTX", "C", "REGN", "ADI", "SCHW", "PLD", "MMC",
     "CB", "ADP", "MDT", "PANW", "FI", "CI", "KLAC", "GILD", "BMY", "DE",
-    "SNPS", "LMT", "SBUX", "AMT", "MU", "MDLZ", "MO", "SO", "ADP", "INTC",
-    "EOG", "CVS", "ZTS", "PYPL", "GTE", "DUK", "SLB", "TGT", "BDX", "ITW",
-    "CSX", "CL", "NOC", "ATVI", "ICE", "HUM", "WM", "CME", "ORCL", "FCX",
-    "PH", "MCK", "PSA", "USB", "EMR", "PNC", "APH", "GENERAL", "MAR", "AON",
+    "SNPS", "LMT", "SBUX", "AMT", "MU", "MDLZ", "MO", "SO", "INTC",
+    "EOG", "CVS", "ZTS", "PYPL", "DUK", "SLB", "TGT", "BDX", "ITW",
+    "CSX", "CL", "NOC", "ICE", "HUM", "WM", "CME", "ORCL", "FCX",
+    "PH", "MCK", "PSA", "USB", "EMR", "PNC", "APH", "GIS", "MAR", "AON",
     "MCO", "ECL", "FDX", "HCA", "NXPI", "RSG", "MSI", "AJG", "COF", "ROP",
-    "CARR", "PSX", "AEP", "PCAR", "D", "MNST", "OXI", "DXCM", "SRE", "TRV",
+    "CARR", "PSX", "AEP", "PCAR", "D", "MNST", "OXY", "DXCM", "SRE", "TRV",
     "MET", "AIG", "GD", "ROST", "CTAS", "WMB", "JCI", "FIS", "EXC", "KMB",
     "STZ", "LULU", "TRGP", "PAYX", "IDXX", "KMI", "DOW", "CTVA", "YUM", "OTIS",
     "ALB", "EA", "PRU", "BIIB", "ED", "XEL", "MTD", "PEG", "FAST", "WELL",
     "VLO", "PCG", "AMP", "AME", "ILMN", "DLTR", "CSGP", "ANET", "VRSK", "CPRT"
 ]
+
+# Alias used by simulate.py --mode SP100 (top 100 subset).
+SP500_TOP_100 = SP500_TOP_200[:100]
 
 # Risk Management Parameters (Dynamic Exits)
 RISK_PARAMS = {

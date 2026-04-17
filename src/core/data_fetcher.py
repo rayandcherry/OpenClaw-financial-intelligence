@@ -24,9 +24,13 @@ def get_sp500_tickers():
         print(f"Error fetching SP500 list: {e}")
         return []
 
-def fetch_data(ticker, period="1y"):
+def fetch_data(ticker, period="2y"):
+    """Fetch daily OHLCV for a ticker.
+
+    Default period is 2y so SMA200 has a meaningful warm-up window
+    (1y ≈ 252 trading days leaves only ~52 usable bars after SMA200 settles).
+    """
     try:
-        # Use Ticker.history which is more reliable for single-ticker fetches than download
         dat = yf.Ticker(ticker)
         df = dat.history(period=period, interval="1d")
 

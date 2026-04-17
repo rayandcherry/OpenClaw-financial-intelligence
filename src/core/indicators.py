@@ -60,11 +60,14 @@ def calculate_indicators(df):
     df['ATR_14'] = tr.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
     
     # --- 6. Market Regime Classification ---
-    # Bull: Price > SMA200 & SMA200 Rising
+    # Bull: Price > SMA200 & SMA200 Rising (20-day net change)
     # Bear: Price < SMA200 & SMA200 Falling
     # Sideways: Else
-    sma200_slope = df['SMA_200'].diff()
-    
+    #
+    # 1-day diff is too noisy — a single wobbly day flips regime. Use the
+    # 20-day net change of SMA200 as the slope signal.
+    sma200_slope = df['SMA_200'] - df['SMA_200'].shift(20)
+
     conditions = [
         (close > df['SMA_200']) & (sma200_slope > 0),
         (close < df['SMA_200']) & (sma200_slope < 0)
@@ -74,31 +77,44 @@ def calculate_indicators(df):
     
     return df
 
-def backtest_regime_performance(df, strategy_type):
+def backtest_regime_performance(df, strategy_type, params=None):
     """
-    Advanced Backtester: 
+    Advanced Backtester:
     1. Identifies all past signals based on strategy logic.
     2. Simulates trades with Dynamic ATR SL/TP.
     3. Segregates performance by Market Regime (Bull/Bear/Sideways).
     4. Checks for recent strategy decay (Self-Correction).
+
+    The signal definition here MUST stay aligned with check_*_setup so the
+    reported win-rate corresponds to the same strategy that actually triggered.
     """
     if df.empty:
         return {}
 
-    # 1. Identify Signals
+    # 1. Identify Signals — read thresholds from STRATEGY_PARAMS (or injected)
     if strategy_type == 'trinity':
+        cfg = params if params else STRATEGY_PARAMS['TRINITY']
+        rsi_min = cfg.get('rsi_min', 40)
+        rsi_max = cfg.get('rsi_max', 60)
+        dist_low = cfg.get('dist_to_ema_min', -0.015)
+        dist_high = cfg.get('dist_to_ema_max', 0.03)
+
         # Trend Pullback: Price > SMA200, Pullback to EMA50, RSI Healthy
         signals = (df['Close'] > df['SMA_200']) & \
-                  ((df['Close'] - df['EMA_50']) / df['EMA_50'] >= -0.015) & \
-                  ((df['Close'] - df['EMA_50']) / df['EMA_50'] <= 0.03) & \
-                  (df['RSI_14'] >= 35) & (df['RSI_14'] <= 65)
+                  ((df['Close'] - df['EMA_50']) / df['EMA_50'] >= dist_low) & \
+                  ((df['Close'] - df['EMA_50']) / df['EMA_50'] <= dist_high) & \
+                  (df['RSI_14'] >= rsi_min) & (df['RSI_14'] <= rsi_max)
         tp_mult, sl_mult = 2.0, 2.0
-        
+
     elif strategy_type == 'panic':
-        # Mean Reversion: Price < BB Low, RSI < 30, High Vol
+        cfg = params if params else STRATEGY_PARAMS['PANIC']
+        rsi_oversold = cfg.get('rsi_oversold', 30)
+        rvol_min = cfg.get('rvol_min', 1.2)
+
+        # Mean Reversion: Price < BB Low, RSI < oversold, High Vol
         signals = (df['Close'] < df['BBL_20_2.0']) & \
-                  (df['RSI_14'] < 30) & \
-                  (df['RVOL'] > 1.2)
+                  (df['RSI_14'] < rsi_oversold) & \
+                  (df['RVOL'] > rvol_min)
         tp_mult, sl_mult = 3.0, 1.0
     
     signal_indices = df.index[signals].tolist()
@@ -121,16 +137,32 @@ def backtest_regime_performance(df, strategy_type):
         sl = entry_price - (atr * sl_mult)
         tp = entry_price + (atr * tp_mult)
         
-        # Check outcome (look forward 20 days max)
+        # Check outcome (look forward 20 days max).
+        # Intra-bar tie-break: when a bar hits both SL and TP, we cannot know the
+        # intra-day path, so use the Open as a proxy for gap direction and
+        # default to the LOSS side to stay conservative.
         outcome = 'hold'
         future_candles = df.iloc[idx+1 : idx+21]
-        
+
         for _, row in future_candles.iterrows():
-            if row['High'] >= tp:
-                outcome = 'win'
+            hit_tp = row['High'] >= tp
+            hit_sl = row['Low'] <= sl
+            if hit_tp and hit_sl:
+                # Cannot know intra-bar path. Use Open as proxy:
+                #  gap-down through SL  → loss; gap-up through TP → win;
+                #  Open between → both triggered intraday → assume SL first (conservative).
+                if row['Open'] <= sl:
+                    outcome = 'loss'
+                elif row['Open'] >= tp:
+                    outcome = 'win'
+                else:
+                    outcome = 'loss'
                 break
-            if row['Low'] <= sl:
+            if hit_sl:
                 outcome = 'loss'
+                break
+            if hit_tp:
+                outcome = 'win'
                 break
         
         # Record trade
@@ -207,22 +239,29 @@ def check_trinity_setup(row, df_context=None, params=None) -> dict:
         return None
 
     # Logic 2: Value (Near EMA50)
+    dist_low = config.get('dist_to_ema_min', -0.015)
+    dist_high = config.get('dist_to_ema_max', 0.03)
     dist_to_ema_pct = (price - ema50) / ema50
-    if not (-0.015 <= dist_to_ema_pct <= 0.03):
+    if not (dist_low <= dist_to_ema_pct <= dist_high):
         return None
 
-    # Logic 3: Momentum (RSI Healthy)
-    rsi_min = config.get('rsi_min', 35)
-    rsi_max = config.get('rsi_max', 65)
-    
+    # Logic 3: Momentum (RSI Healthy) — defaults aligned with config (40–60)
+    rsi_min = config.get('rsi_min', 40)
+    rsi_max = config.get('rsi_max', 60)
+
     if not (rsi_min <= rsi <= rsi_max):
         return None
 
     # --- DYNAMIC RISK MANAGEMENT ---
-    stop_loss = round(price - (2.0 * atr), 2)
-    stop_loss = min(stop_loss, sma200)
+    # Start with 2-ATR stop. If SMA200 sits ABOVE the ATR stop, keep the ATR
+    # stop (tighter). If SMA200 sits BELOW, clamp stop down to SMA200 so the
+    # trend line acts as a floor — but this widens risk, so track it.
+    atr_stop = round(price - (2.0 * atr), 2)
+    clamped_to_sma = sma200 < atr_stop
+    stop_loss = round(min(atr_stop, sma200), 2) if clamped_to_sma else atr_stop
     risk = price - stop_loss
     take_profit = round(price + (risk * 2), 2)
+    rr_label = "1:2 (SMA200 floor)" if clamped_to_sma else "1:2 (ATR Based)"
 
     # --- REGIME BACKTEST ---
     # Ensure stats structure is always returned even if df_context is None
@@ -235,7 +274,7 @@ def check_trinity_setup(row, df_context=None, params=None) -> dict:
         "warning": None
     }
     
-    stats = backtest_regime_performance(df_context, 'trinity') if df_context is not None else default_stats
+    stats = backtest_regime_performance(df_context, 'trinity', params=config) if df_context is not None else default_stats
     
     # Confidence Score Calc
     confidence = 80 # Base
@@ -256,7 +295,7 @@ def check_trinity_setup(row, df_context=None, params=None) -> dict:
         "plan": {
             "stop_loss": stop_loss,
             "take_profit": take_profit,
-            "risk_reward": "1:2 (ATR Based)"
+            "risk_reward": rr_label
         },
         "side": "LONG"
     }
@@ -271,65 +310,76 @@ def check_2b_setup(row, df_context=None) -> dict:
     """
     if df_context is None or df_context.empty:
         return None
-    
+
+    cfg = STRATEGY_PARAMS['2B']
+    lookback_min = cfg.get('lookback_min', 20)
+    lookback_max = cfg.get('lookback_max', 60)
+
     idx = df_context.index.get_loc(row.name)
-    if idx < 60: return None # Need history
-    
+    if idx < lookback_max:
+        return None  # Need history
+
     price = row['Close']
     rsi = row.get('RSI_14')
     macd_hist = row.get('MACD_Hist')
-    
-    # Config (Hardcoded for now based on Plan, ideally from config.py passed down)
-    lookback_min = 20
-    lookback_max = 60
-    
-    # --- Step 1: Identify Key Levels (20-60 days ago excluding recent 5 days to avoid finding today as high) ---
-    # We look for a high/low that occurred between t-60 and t-5
-    past_window = df_context.iloc[idx-lookback_max : idx-5] 
-    
+    regime = row.get('Regime', 'Unknown')
+
+    # --- Step 1: Identify Key Levels (lookback_max..lookback_min/4 ago) ---
+    # Window excludes the most recent ~5 bars so today's bar isn't both the
+    # prior high/low AND the breakout.
+    exclude_recent = max(5, lookback_min // 4)
+    past_window = df_context.iloc[idx - lookback_max : idx - exclude_recent]
+    if past_window.empty:
+        return None
+
     prev_high = past_window['High'].max()
     prev_low = past_window['Low'].min()
-    
+
     prev_high_idx = past_window['High'].idxmax()
     prev_low_idx = past_window['Low'].idxmin()
-    
+
     prev_high_rsi = df_context.loc[prev_high_idx, 'RSI_14']
     prev_low_rsi = df_context.loc[prev_low_idx, 'RSI_14']
-    
-    # --- Step 2: Check for Breakout & Reversal (The 2B Pattern) ---
+
+    # --- Step 2: Detect breakout candidates (exclusive: pick the stronger one) ---
+    recent_high = df_context.iloc[idx-2:idx+1]['High'].max()
+    recent_low = df_context.iloc[idx-2:idx+1]['Low'].min()
+
+    bearish_valid = recent_high > prev_high and price < prev_high
+    bullish_valid = recent_low < prev_low and price > prev_low
+
+    # Regime filter: don't fight the trend with 2B
+    if bearish_valid and regime == 'Bull':
+        bearish_valid = False
+    if bullish_valid and regime == 'Bear':
+        bullish_valid = False
+
     signal_type = None
+    is_divergence = False
     key_level = 0.0
     sl_price = 0.0
-    
-    # Bearish 2B: Price broke PrevHigh recently (today/yest) but Closed BELOW it today
-    # And High of today (or yesterday) was > PrevHigh
-    recent_high = df_context.iloc[idx-2:idx+1]['High'].max() # Last 3 days high
-    
-    if recent_high > prev_high and price < prev_high:
-        # Candidate for Bearish 2B
+
+    if bearish_valid and bullish_valid:
+        # Both triggered on same bar — pick the side with the larger breakout
+        # distance past the key level.
+        bear_dist = (recent_high - prev_high) / prev_high if prev_high > 0 else 0
+        bull_dist = (prev_low - recent_low) / prev_low if prev_low > 0 else 0
+        if bear_dist >= bull_dist:
+            bullish_valid = False
+        else:
+            bearish_valid = False
+
+    if bearish_valid:
         signal_type = "Bearish 2B"
         key_level = prev_high
-        sl_price = recent_high * 1.005 # Just above the wick
-        
-        # Momentum Filter: RSI Divergence
-        # If Current RSI < RSI at PrevHigh, it's divergence
+        sl_price = recent_high * 1.005  # Just above the wick
         is_divergence = rsi < prev_high_rsi
-        
-    elif recent_high < prev_low: # Impossible, Logic check for Bullish
-        pass 
-        
-    # Bullish 2B: Price broke PrevLow recently but Closed ABOVE it
-    recent_low = df_context.iloc[idx-2:idx+1]['Low'].min()
-    
-    if recent_low < prev_low and price > prev_low:
+    elif bullish_valid:
         signal_type = "Bullish 2B"
         key_level = prev_low
-        sl_price = recent_low * 0.995 # Just below wick
-        
-        # Momentum Filter: RSI Divergence
-        # If Current RSI > RSI at PrevLow
+        sl_price = recent_low * 0.995  # Just below wick
         is_divergence = rsi > prev_low_rsi
-        
+
     if not signal_type:
         return None
         
@@ -344,11 +394,12 @@ def check_2b_setup(row, df_context=None) -> dict:
     rating = "High" if (is_divergence and is_macd_shrinking) else "Medium"
     
     # --- Step 4: Risk Calc ---
+    sl_limit = cfg.get('sl_limit_pct', 0.05)
     risk_pct = abs(price - sl_price) / price
-    if risk_pct > 0.05:
+    if risk_pct > sl_limit:
         rating = "Low (Wide Stop)"
         # Adjust size logic or just flag it
-        
+
     tp_price = price - (abs(price - sl_price) * 3) if "Bearish" in signal_type else price + (abs(price - sl_price) * 3)
     
     # --- Backtest (Optional, reusing regime logic if applicable or skip for MVP) ---
@@ -364,7 +415,8 @@ def check_2b_setup(row, df_context=None) -> dict:
             "key_level": f"${key_level:.2f}",
             "rsi_div": str(is_divergence),
             "macd_weak": str(is_macd_shrinking),
-            "rating": rating
+            "rating": rating,
+            "regime": regime
         },
         "stats": {
             "total": {"wr": 0, "count": 0},
@@ -415,7 +467,7 @@ def check_panic_setup(row, df_context=None, params=None) -> dict:
     take_profit = round(price + (3.0 * atr), 2)
 
     # --- REGIME BACKTEST ---
-    stats = backtest_regime_performance(df_context, 'panic') if df_context is not None else {}
+    stats = backtest_regime_performance(df_context, 'panic', params=config) if df_context is not None else {}
 
     # Confidence Score Calc
     confidence = 75 # Base for Panic (Riskier)
