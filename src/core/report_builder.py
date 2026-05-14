@@ -97,6 +97,44 @@ def classify_signal(signal: dict) -> tuple[str, str | None]:
     return "WATCH", f"moderate confidence ({confidence})"
 
 
+def _fmt_news_lines(news_str: str | None, max_items: int = 2) -> list[str]:
+    """Parse the news_str produced by core.news.get_market_news into a small
+    list of trimmed headline lines with 📰 prefix. Returns [] when news is
+    empty, an error placeholder, or unparseable."""
+    if not news_str:
+        return []
+    if news_str.startswith("No recent") or news_str.startswith("Could not"):
+        return []
+    out: list[str] = []
+    for raw in news_str.split("\n"):
+        raw = raw.strip()
+        if not raw.startswith("- "):
+            continue
+        # Format from news.py: "- Title: Body". Keep title only — body is noisy.
+        text = raw[2:]
+        title = text.split(": ", 1)[0]
+        title = title[:90].rstrip()
+        if title:
+            out.append(f"  📰 {title}")
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _fmt_track_line(sim_stats: dict | None) -> str:
+    """Render the per-ticker 3y mini-backtest stats. Empty string when there
+    were no trades on this ticker over the lookback (not informative)."""
+    if not sim_stats:
+        return ""
+    trades = sim_stats.get("trades", 0) or 0
+    if trades == 0:
+        return ""
+    roi = sim_stats.get("roi", 0) or 0
+    wr = sim_stats.get("wr", 0) or 0
+    sign = "+" if roi >= 0 else ""
+    return f"  3y track: ROI {sign}{roi}% / WR {wr}% / {trades} trades"
+
+
 def _fmt_signal_line(signal: dict, include_plan: bool) -> str:
     ticker = signal["ticker"]
     strategy_key = _normalize_strategy(signal.get("strategy", ""))
@@ -121,10 +159,15 @@ def _fmt_signal_line(signal: dict, include_plan: bool) -> str:
     if price is None or sl is None or tp is None:
         return header
 
-    plan_line = f"  ${price:.2f} → SL ${sl} / TP ${tp}"
-    if rr_short:
-        plan_line += f" ({rr_short})"
-    return f"{header}\n{plan_line}"
+    parts = [header, f"  ${price:.2f} → SL ${sl} / TP ${tp}" + (f" ({rr_short})" if rr_short else "")]
+
+    track = _fmt_track_line(signal.get("sim_stats"))
+    if track:
+        parts.append(track)
+
+    parts.extend(_fmt_news_lines(signal.get("news")))
+
+    return "\n".join(parts)
 
 
 def _regime_summary(signals: Iterable[dict]) -> str:
