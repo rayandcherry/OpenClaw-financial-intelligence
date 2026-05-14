@@ -75,10 +75,10 @@ def test_set_schedule(svc, db):
 
 def test_update_preferences(svc, db):
     user = svc.register(telegram_id=999, username="ivan")
-    svc.update_preferences(user.id, lang="ZH", scan_mode="CRYPTO")
+    svc.update_preferences(user.id, lang="ZH", scan_mode="US")
     user = svc.get_by_telegram_id(999)
     assert user.lang == "ZH"
-    assert user.scan_mode == "CRYPTO"
+    assert user.scan_mode == "US"
 
 
 def test_deactivate(svc, db):

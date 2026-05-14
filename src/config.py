@@ -3,11 +3,6 @@ Configuration for OpenClaw Financial Intelligence.
 """
 
 # Asset Lists
-# Top 200 US Stocks by Market Cap (Approx)
-US_STOCKS = [
-    "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "TSLA", "AMD", "NFLX",
-    "JPM", "V", "LLY", "AVGO", "SPY", "QQQ", "IWM", "COIN", "MSTR"
-]
 
 CRYPTO_ASSETS = [
     "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD",
@@ -15,6 +10,41 @@ CRYPTO_ASSETS = [
     "SHIB-USD", "LTC-USD", "BCH-USD", "UNI-USD", "NEAR-USD", "ATOM-USD",
     "ICP-USD", "FIL-USD", "APT-USD"
 ]
+
+# US AI Industry Chain (curated). Deduped union of all layered presets below.
+# Used by `--mode AI` in scan.py / simulate.py / mcp_server.py.
+AI_LIST = [
+    # Platforms / SaaS / AI services
+    "MSFT", "GOOGL", "AMZN", "META", "AAPL", "CRM", "ADBE", "PLTR",
+    "SNOW", "ORCL", "NOW", "AI", "DDOG", "CRWD",
+    # Datacenter infrastructure (REIT + GPU cloud)
+    "EQIX", "DLR", "IRM", "CRWV",
+    # Silicon (GPU / ASIC / CPU / Memory + foundry ADR)
+    "NVDA", "AMD", "INTC", "QCOM", "AVGO", "MRVL", "ARM",
+    "MU", "WDC", "STX", "PSTG", "TSM",
+    # Semi equipment
+    "AMAT", "LRCX", "KLAC", "TER", "KLIC",
+    # Networking (switch + optical + high-speed interconnect)
+    # JNPR removed — Juniper Networks acquired by HPE (2025), delisted.
+    "ANET", "CSCO", "ALAB", "COHR", "LITE", "AAOI", "FN",
+    # Server / OEM / ODM
+    "SMCI", "DELL", "HPE", "BELFB", "HPQ",
+    # Power (grid + generation + gas pipelines)
+    "ETN", "VRT", "HUBB", "EMR", "ROK",
+    "CEG", "VST", "GEV", "BE", "ET", "KMI", "WMB",
+    # Cooling / thermal (VRT shared with Power)
+    "NVT", "CARR", "TT", "JCI",
+    # Analog / Power IC / PCB / Connectors
+    "MPWR", "TXN", "ADI", "ON", "MCHP", "WOLF",
+    "TTMI", "APH", "TEL",
+    # Physical AI / Robotics (ROK shared with Power)
+    "TSLA", "SYM", "ZBRA",
+]
+
+# US scan universe — aliased to AI_LIST. The original mixed list
+# (banks/drugs/index ETFs/crypto proxies) was retired in favor of the curated
+# AI industry chain. `--mode US` and `--mode AI` are now equivalent.
+US_STOCKS = AI_LIST
 
 SP500_TOP_200 = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "AVGO",
@@ -80,14 +110,47 @@ BOT_CONFIG = {
     "backtest_cache_ttl_days": 7,
     "default_schedule_times": ["08:00", "20:00"],
     "default_lang": "EN",
-    "default_scan_mode": "ALL",
-    "default_strategies": ["TRINITY", "PANIC", "2B"],
+    "default_scan_mode": "US",
+    "default_strategies": ["TRINITY", "PANIC"],
 }
 
 PRESET_WATCHLISTS = {
     "SP500 Top 20": ["AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "META", "BRK-B", "UNH", "XOM", "JNJ",
                       "JPM", "V", "PG", "MA", "HD", "CVX", "MRK", "ABBV", "LLY", "PEP"],
     "FAANG+": ["META", "AAPL", "AMZN", "NVDA", "GOOGL", "MSFT", "TSLA", "NFLX"],
-    "Crypto Major": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD",
-                      "AVAX-USD", "DOT-USD", "MATIC-USD", "LINK-USD"],
+
+    # --- AI Industry Chain (layered) ---
+    "AI Platforms": ["MSFT", "GOOGL", "AMZN", "META", "AAPL", "CRM", "ADBE",
+                      "PLTR", "SNOW", "ORCL", "NOW", "AI", "DDOG", "CRWD"],
+    "AI Infrastructure": ["EQIX", "DLR", "IRM", "CRWV"],
+    "AI Silicon": ["NVDA", "AMD", "INTC", "QCOM", "AVGO", "MRVL", "ARM",
+                    "MU", "WDC", "STX", "PSTG", "TSM"],
+    "AI Semi Equipment": ["AMAT", "LRCX", "KLAC", "TER", "KLIC"],
+    "AI Networking": ["ANET", "CSCO", "AVGO", "MRVL", "ALAB",
+                       "COHR", "LITE", "AAOI", "FN"],
+    "AI Server": ["SMCI", "DELL", "HPE", "BELFB", "HPQ"],
+    "AI Power": ["ETN", "VRT", "HUBB", "EMR", "ROK", "CEG", "VST", "GEV",
+                  "BE", "ET", "KMI", "WMB"],
+    "AI Cooling": ["VRT", "NVT", "CARR", "TT", "JCI"],
+    "AI Analog/Interconnect": ["MPWR", "TXN", "ADI", "ON", "MCHP", "WOLF",
+                                "TTMI", "APH", "TEL"],
+    "AI Robotics": ["TSLA", "SYM", "ROK", "ZBRA"],
+}
+
+# Strategy edge stats from 3y AI universe portfolio backtest. Refreshed
+# 2026-05-13. Update when AI_LIST changes materially or quarterly. Used by
+# core/report_builder.py to classify signals (TAKE / WATCH / SKIP).
+STRATEGY_EDGE_STATS = {
+    "trinity": {
+        "wr_pct": 67.6, "avg_pnl": 186, "trades": 296, "edge": "positive",
+        "label": "workhorse",
+    },
+    "panic": {
+        "wr_pct": 81.0, "avg_pnl": 469, "trades": 63, "edge": "positive",
+        "label": "rare but huge",
+    },
+    "2b_reversal": {
+        "wr_pct": 55.8, "avg_pnl": -44, "trades": 104, "edge": "negative",
+        "label": "negative edge",
+    },
 }

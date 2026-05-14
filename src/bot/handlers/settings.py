@@ -17,7 +17,7 @@ async def settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Scan Mode: {user.scan_mode}\n"
         f"Strategies: {strategies}\n\n"
         f"/lang EN|ZH — change language\n"
-        f"/mode US|CRYPTO|ALL — change scan mode",
+        f"/mode US — scan mode (crypto paused)",
         parse_mode="Markdown",
     )
 
@@ -44,12 +44,19 @@ async def mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args or context.args[0].upper() not in ("US", "CRYPTO", "ALL"):
-        await update.message.reply_text("Usage: /mode US, /mode CRYPTO, or /mode ALL")
+        await update.message.reply_text("Usage: /mode US  (crypto scanning is currently paused)")
         return
 
-    mode = context.args[0].upper()
-    user_svc.update_preferences(user.id, scan_mode=mode)
-    await update.message.reply_text(f"Scan mode set to {mode}.")
+    requested = context.args[0].upper()
+    if requested != "US":
+        user_svc.update_preferences(user.id, scan_mode="US")
+        await update.message.reply_text(
+            f"Crypto scanning is currently paused. Scan mode set to US."
+        )
+        return
+
+    user_svc.update_preferences(user.id, scan_mode="US")
+    await update.message.reply_text("Scan mode set to US.")
 
 
 ALL_STRATEGIES = ["TRINITY", "PANIC", "2B"]

@@ -22,7 +22,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Settings*\n"
         "/settings — Show preferences\n"
         "/lang EN|ZH — Set language\n"
-        "/mode US|CRYPTO|ALL — Set scan mode\n"
+        "/mode US — Set scan mode (crypto paused)\n"
         "/strategies — Toggle strategies\n\n"
         "/status — Account overview and scan history\n"
         "/last — Show your most recent scan report\n"

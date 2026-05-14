@@ -43,14 +43,17 @@ def test_collect_users_for_time(schedule_svc, mock_user_svc):
 
 
 def test_build_user_tickers_map(schedule_svc, mock_user_svc):
+    """Crypto tickers are stripped via filter_by_mode (crypto paused)."""
     user1 = MagicMock()
     user1.id = 1
+    user1.scan_mode = "US"
     user2 = MagicMock()
     user2.id = 2
+    user2.scan_mode = "US"
     mock_user_svc.get_watchlist.side_effect = [["AAPL", "NVDA"], ["NVDA", "BTC-USD"]]
 
     ticker_map = schedule_svc.build_user_tickers_map([user1, user2])
-    assert ticker_map == {1: ["AAPL", "NVDA"], 2: ["NVDA", "BTC-USD"]}
+    assert ticker_map == {1: ["AAPL", "NVDA"], 2: ["NVDA"]}
 
 
 @pytest.mark.asyncio
@@ -96,17 +99,18 @@ async def test_execute_batch_deactivates_blocked_user(schedule_svc, mock_user_sv
 
 
 @pytest.mark.asyncio
-async def test_trigger_scan_skips_us_on_weekend(schedule_svc, mock_user_svc, mock_scan_svc, mock_report_fmt):
+async def test_trigger_scan_skips_on_weekend(schedule_svc, mock_user_svc, mock_scan_svc, mock_report_fmt):
+    """With crypto paused, weekend scans become a no-op (US markets closed)."""
     mock_user = MagicMock()
     mock_user.id = 1
     mock_user.telegram_id = 111
     mock_user.strategies = ["TRINITY"]
-    mock_user.scan_mode = "ALL"
+    mock_user.scan_mode = "US"
     mock_user_svc.get_users_for_time.return_value = [mock_user]
     mock_user_svc.get_watchlist.return_value = ["AAPL", "BTC-USD"]
 
-    mock_scan_svc.batch_scan = AsyncMock(return_value={1: []})
-    mock_scan_svc.dedupe_tickers = MagicMock(return_value=["BTC-USD"])
+    mock_scan_svc.batch_scan = AsyncMock(return_value={})
+    mock_scan_svc.dedupe_tickers = MagicMock(return_value=[])
 
     deliver = AsyncMock()
 
@@ -114,7 +118,6 @@ async def test_trigger_scan_skips_us_on_weekend(schedule_svc, mock_user_svc, moc
     with patch.object(ScheduleService, '_is_us_market_day', return_value=False):
         await schedule_svc.trigger_scheduled_scan(time(8, 0), deliver)
 
-    # batch_scan should only receive crypto tickers
-    call_args = mock_scan_svc.batch_scan.call_args
-    user_tickers_passed = call_args[0][0]
-    assert user_tickers_passed == {1: ["BTC-USD"]}
+    # No tickers left after crypto filter + weekend filter → batch_scan must NOT run
+    mock_scan_svc.batch_scan.assert_not_called()
+    deliver.assert_not_called()

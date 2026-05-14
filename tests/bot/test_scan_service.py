@@ -109,13 +109,15 @@ def test_filter_by_strategies(scan_svc):
 
 
 def test_filter_by_mode():
+    """Crypto scanning is paused — all modes return US tickers only."""
     from src.bot.services.scan_service import ScanService
     tickers = ["AAPL", "NVDA", "BTC-USD", "ETH-USD"]
+    expected_us = ["AAPL", "NVDA"]
 
-    assert ScanService.filter_by_mode(tickers, "ALL") == tickers
-    assert ScanService.filter_by_mode(tickers, None) == tickers
-    assert ScanService.filter_by_mode(tickers, "US") == ["AAPL", "NVDA"]
-    assert ScanService.filter_by_mode(tickers, "CRYPTO") == ["BTC-USD", "ETH-USD"]
+    assert ScanService.filter_by_mode(tickers, "US") == expected_us
+    assert ScanService.filter_by_mode(tickers, "ALL") == expected_us
+    assert ScanService.filter_by_mode(tickers, "CRYPTO") == expected_us
+    assert ScanService.filter_by_mode(tickers, None) == expected_us
 
 
 @pytest.mark.asyncio

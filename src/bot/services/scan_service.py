@@ -21,14 +21,12 @@ class ScanService:
 
     @staticmethod
     def filter_by_mode(tickers: list[str], scan_mode: str) -> list[str]:
-        """Filter tickers by scan mode (US/CRYPTO/ALL)."""
-        if not scan_mode or scan_mode == "ALL":
-            return tickers
-        if scan_mode == "CRYPTO":
-            return [t for t in tickers if t.endswith("-USD")]
-        if scan_mode == "US":
-            return [t for t in tickers if not t.endswith("-USD")]
-        return tickers
+        """Filter tickers by scan mode.
+
+        Crypto scanning is currently paused — all modes (US/CRYPTO/ALL, or
+        legacy values stored in DB) return US tickers only.
+        """
+        return [t for t in tickers if not t.endswith("-USD")]
 
     def dedupe_tickers(self, user_tickers: dict[int, list[str]]) -> list[str]:
         unique = set()

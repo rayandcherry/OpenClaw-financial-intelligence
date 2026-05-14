@@ -15,7 +15,7 @@ from core.cache_manager import BacktestCache
 from backtest import Backtester
 from tracker.service import TrackerService
 from tracker.risk import CapitalAllocator
-from config import US_STOCKS, CRYPTO_ASSETS
+from config import US_STOCKS, AI_LIST
 
 _cache = BacktestCache()
 
@@ -26,13 +26,8 @@ _tracker.load_positions()
 
 
 def _filter_tickers_by_mode(tickers, mode):
-    if not mode or mode == "ALL":
-        return tickers
-    if mode == "CRYPTO":
-        return [t for t in tickers if t.endswith("-USD")]
-    if mode == "US":
-        return [t for t in tickers if not t.endswith("-USD")]
-    return tickers
+    # Crypto scanning is paused — all modes return US tickers only.
+    return [t for t in tickers if not t.endswith("-USD")]
 
 
 def _filter_signals_by_strategy(signals, strategies):
@@ -60,15 +55,15 @@ def handle_news(ticker: str, max_results: int = 5) -> dict:
 
 
 @mcp.tool()
-def scan(tickers: list[str] = None, mode: str = "ALL", strategies: list[str] = None) -> dict:
+def scan(tickers: list[str] = None, mode: str = "US", strategies: list[str] = None) -> dict:
     """Scan tickers for trading signals using Trinity, Panic, and 2B strategies."""
     return handle_scan(tickers=tickers, mode=mode, strategies=strategies)
 
 
-def handle_scan(tickers=None, mode="ALL", strategies=None):
+def handle_scan(tickers=None, mode="US", strategies=None):
     try:
         if tickers is None:
-            tickers = US_STOCKS + CRYPTO_ASSETS
+            tickers = list(AI_LIST) if mode == "AI" else list(US_STOCKS)
         tickers = _filter_tickers_by_mode(tickers, mode)
         signals = scan_market(tickers)
         signals = _filter_signals_by_strategy(signals, strategies)

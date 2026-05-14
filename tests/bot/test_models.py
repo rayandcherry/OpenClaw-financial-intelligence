@@ -10,7 +10,7 @@ def test_create_user(db):
     assert user.id is not None
     assert user.telegram_id == 123456789
     assert user.lang == "EN"
-    assert user.scan_mode == "ALL"
+    assert user.scan_mode == "US"
     assert user.is_active is True
 
 
