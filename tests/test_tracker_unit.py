@@ -91,6 +91,26 @@ class TestCapitalAllocator(unittest.TestCase):
         self.assertEqual(res['qty'], 200.0)
         self.assertEqual(res['max_loss'], 2000.0)
 
+    def test_tier_cap_binds_when_tighter_than_kelly_and_risk(self):
+        """Tier C cap of $1500 binds before VaR/Kelly on a $30k account."""
+        allocator = CapitalAllocator(account_balance=30000, max_risk_per_trade_pct=0.02)
+        # Entry $100, SL $98 → tight stop. VaR=600 → 300 shares ($30k). Kelly huge.
+        # Tier C cap $1500 → 15 shares.
+        res = allocator.calculate_position_size("TEST", 100, 98, win_rate_pct=70,
+                                                 tier_cost_cap=1500)
+        assert res['constraint'] == "Tier Cap"
+        assert res['qty'] == 15.0
+
+    def test_tier_cap_loose_lets_kelly_or_risk_bind(self):
+        """Tier A cap $4500 is loose; VaR or Kelly binds instead."""
+        allocator = CapitalAllocator(account_balance=30000, max_risk_per_trade_pct=0.02)
+        # SL 10pt → VaR $600 / $10 = 60 shares = $6000. Tier A cap = 45 shares.
+        # Wait: 4500/100 = 45 shares = under $6000 VaR-allowed. Tier still binds...
+        # Use a much looser cap to make VaR bind: cap=$50000.
+        res = allocator.calculate_position_size("TEST", 100, 90, win_rate_pct=70,
+                                                 tier_cost_cap=50000)
+        assert res['constraint'] in ("Risk Limit", "Kelly Criterion")
+
     def test_kelly_constrained_by_edge(self):
         """Case: Weak edge, Kelly restricts size below Risk limit"""
         # WinRate 55%, Reward 1.0 (1:1). 

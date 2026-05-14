@@ -167,6 +167,64 @@ PRESET_WATCHLISTS = {
 # 2×ATR, Panic 1×ATR). Re-run after material AI_LIST changes via:
 #   simulate.py --mode AI --strategy <NAME> --period 3y
 # Used by core/report_builder.py to classify signals (TAKE / WATCH / SKIP).
+# --- Asset Quality Tiers (sizing concentration caps) ---
+# Three-tier classification: A=core mega-cap, B=growth mid-cap, C=speculative.
+# Cost cap (% of account) controls "overnight gap through SL" exposure. The
+# 2% VaR cap (RISK_PARAMS) still enforces single-trade stop-loss loss.
+TIER_COST_CAP_PCT = {
+    "A": 0.15,   # $4,500 on a $30k account
+    "B": 0.10,   # $3,000
+    "C": 0.05,   # $1,500
+}
+
+ASSET_TIERS = {
+    # --- Tier A: core mega-cap, durable cash flow, multi-year compounders ---
+    "NVDA": "A", "MSFT": "A", "GOOGL": "A", "AMZN": "A", "META": "A",
+    "AAPL": "A", "TSM": "A", "AVGO": "A",
+
+    # --- Tier B: profitable growth, narrower moat or more cyclical ---
+    "AMD": "B", "QCOM": "B", "ORCL": "B", "CRM": "B", "ADBE": "B",
+    "CSCO": "B", "ANET": "B", "NOW": "B", "MU": "B",
+    "LRCX": "B", "AMAT": "B", "KLAC": "B",
+    "HPE": "B", "DELL": "B",
+    "MRVL": "B", "ARM": "B",
+    "TXN": "B", "ADI": "B",
+    "ETN": "B", "EQIX": "B", "DLR": "B",
+    "EMR": "B", "CARR": "B", "TT": "B", "JCI": "B", "IRM": "B", "ROK": "B",
+    "HUBB": "B",
+    "DDOG": "B", "CRWD": "B",
+    "INTC": "B",
+
+    # --- Tier C: smaller cap, high beta, unproven cash flow, or speculative ---
+    "CRWV": "C", "PLTR": "C", "AI": "C", "SYM": "C",
+    "BE": "C", "WOLF": "C", "SMCI": "C",
+    "ALAB": "C", "COHR": "C", "LITE": "C", "AAOI": "C", "FN": "C",
+    "BELFB": "C", "HPQ": "C",
+    "STX": "C", "WDC": "C", "PSTG": "C",
+    "KLIC": "C", "TER": "C",
+    "MPWR": "C", "MCHP": "C", "ON": "C",
+    "NVT": "C", "ZBRA": "C",
+    "TTMI": "C", "APH": "C", "TEL": "C",
+    "GEV": "C", "VST": "C", "CEG": "C", "VRT": "C",
+    "KMI": "C", "WMB": "C", "ET": "C",
+    "TSLA": "C",  # single-stock volatility, not a quality knock
+}
+
+
+def tier_for(ticker: str) -> str:
+    """Return the tier letter ('A'/'B'/'C') for a ticker, defaulting to 'C'
+    for anything outside the curated AI universe (treat unknown as risky)."""
+    return ASSET_TIERS.get(ticker.upper(), "C")
+
+
+def tier_cost_cap(ticker: str, account_balance: float = None) -> float:
+    """Return the dollar cost cap for a ticker. If account_balance is None,
+    uses ACCOUNT_BALANCE from env."""
+    if account_balance is None:
+        account_balance = ACCOUNT_BALANCE
+    return account_balance * TIER_COST_CAP_PCT[tier_for(ticker)]
+
+
 STRATEGY_EDGE_STATS = {
     "trinity": {
         "wr_pct": 68.5, "avg_pnl": 164, "trades": 336, "edge": "positive",

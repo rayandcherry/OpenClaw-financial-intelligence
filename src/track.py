@@ -172,11 +172,14 @@ def main():
         if rec == 0:
             print("❌ Do not take this trade (Negative Edge or Zero Risk).")
         else:
-            print(f"\n📊 Sizing Recommendation for {args.ticker}:")
-            print(f"   Qty: {rec['qty']}")
-            print(f"   Max Risk: ${rec['max_loss']}")
+            print(f"\n📊 Sizing Recommendation for {args.ticker.upper()}:")
+            print(f"   Tier:       {rec.get('tier', '?')} (cost cap ${rec.get('tier_cap', '?')})")
+            print(f"   Qty:        {rec['qty']}")
+            cost = rec['qty'] * args.price
+            print(f"   Cost:       ${cost:.2f}")
+            print(f"   Max Risk:   ${rec['max_loss']}")
             print(f"   Constraint: {rec['constraint']}")
-            print(f"   Kelly %: {rec['kelly_suggestion_pct']}%")
+            print(f"   Kelly %:    {rec['kelly_suggestion_pct']}%")
 
     elif args.command == "remove":
         if args.ticker in service.positions:

@@ -17,17 +17,52 @@ class TrackerService:
         self.positions_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "positions.json")
 
     def add_position(self, ticker, entry_price, qty, side='LONG', tp1=None):
-        if ticker in self.positions:
-            print(f"Position for {ticker} already exists.")
-            return
+        from src.config import tier_for
 
-        # Fetch initial ATR
-        df = fetch_data(ticker, period="1mo") # Short period for ATR
+        # Fetch latest ATR up front — used either for a fresh PositionManager
+        # or to recompute SL on a Tier A add-on.
+        df = fetch_data(ticker, period="1mo")
         atr = 0
         if df is not None:
-             df = calculate_indicators(df)
-             atr = df['ATR_14'].iloc[-1]
-        
+            df = calculate_indicators(df)
+            atr = df['ATR_14'].iloc[-1]
+
+        if ticker in self.positions:
+            existing = self.positions[ticker]
+            tier = tier_for(ticker)
+            # Tier A only: average-up onto the existing position if it is
+            # already breakeven-locked (no downside on the original stack).
+            # Tier B/C add-on is rejected — they don't earn the second bullet.
+            if tier == 'A' and existing.is_breakeven_active and existing.side == side.upper():
+                total_qty = existing.qty + float(qty)
+                avg_entry = (existing.entry_price * existing.qty +
+                             float(entry_price) * float(qty)) / total_qty
+                # Recompute initial SL from the NEW ATR (a fresh stop on the
+                # combined block), but never below the existing trailing SL —
+                # we never give back locked profit by averaging up.
+                new_sl_dist = existing.sl_atr_mult * float(atr) if atr else None
+                fresh_sl = (avg_entry - new_sl_dist) if (side.upper() == 'LONG' and new_sl_dist) else None
+                merged_sl = max(existing.current_sl, fresh_sl) if fresh_sl else existing.current_sl
+
+                merged = PositionManager(ticker, avg_entry, total_qty, side,
+                                         atr_at_entry=atr, tp1=tp1,
+                                         initial_sl=merged_sl)
+                merged.is_breakeven_active = True  # preserved from existing
+                self.positions[ticker] = merged
+                print(f"📈 Tier A add-on for {ticker}: avg ${avg_entry:.2f} × {total_qty}, "
+                      f"SL ${merged_sl:.2f} (was ${existing.current_sl:.2f}), ATR {atr:.2f}")
+                return
+            else:
+                reason = (
+                    "tier is not A" if tier != 'A'
+                    else "existing position not yet breakeven-locked"
+                    if not existing.is_breakeven_active
+                    else "side mismatch"
+                )
+                print(f"⚠️  {ticker} already tracked and add-on blocked ({reason}). "
+                      f"Tier={tier}, breakeven={existing.is_breakeven_active}.")
+                return
+
         pos = PositionManager(ticker, entry_price, qty, side, atr_at_entry=atr, tp1=tp1)
         self.positions[ticker] = pos
         print(f"Started tracking {ticker} | Entry: {entry_price} | TP1: {pos.tp1} | ATR: {atr:.2f}")
@@ -73,7 +108,15 @@ class TrackerService:
         return status_report, alerts
 
     def get_sizing_recommendation(self, ticker, price, sl, win_rate):
-        return self.risk_manager.calculate_position_size(ticker, price, sl, win_rate)
+        from src.config import tier_cost_cap, tier_for
+        cap = tier_cost_cap(ticker, self.balance)
+        result = self.risk_manager.calculate_position_size(
+            ticker, price, sl, win_rate, tier_cost_cap=cap
+        )
+        if isinstance(result, dict):
+            result["tier"] = tier_for(ticker)
+            result["tier_cap"] = round(cap, 2)
+        return result
 
     def generate_tax_preview(self):
         tax_report = []
