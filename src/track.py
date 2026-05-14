@@ -52,6 +52,55 @@ def save_positions(service):
     with open(POSITIONS_FILE, 'w') as f:
         json.dump(data, f, indent=2)
 
+def _build_telegram_summary(service, status_report, alerts, total_tax):
+    """Format the monitor output as a Telegram-Markdown-V1 message.
+    `status_report` and `alerts` come from TrackerService.update_market() —
+    we re-derive structured fields off `service.positions` for a clean layout."""
+    from datetime import datetime
+    date_str = datetime.now().strftime("%b %d, %Y")
+
+    parts = [f"*📊 Position Monitor* · {date_str}"]
+
+    positions = list(service.positions.values())
+    total_pnl = sum(p.unrealized_pnl for p in positions)
+    pnl_sign = "+" if total_pnl >= 0 else "-"
+    parts.append(f"{len(positions)} positions · PnL {pnl_sign}${abs(total_pnl):.2f}")
+
+    if alerts:
+        alert_lines = ["🚨 *Alerts*"]
+        for a in alerts:
+            # Existing format: "🚨 **ACTION REQUIRED (NVDA)**: SELL_HALF_TP1"
+            # Reduce to: "• NVDA: SELL_HALF_TP1"
+            try:
+                ticker = a.split("(")[1].split(")")[0]
+                action = a.split(": ", 1)[1]
+                alert_lines.append(f"• `{ticker}`: {action}")
+            except (IndexError, ValueError):
+                alert_lines.append(f"• {a}")
+        parts.append("\n".join(alert_lines))
+
+    if positions:
+        pos_lines = ["📈 *Positions*"]
+        for p in positions:
+            pnl = p.unrealized_pnl
+            pnl_str = f"+${pnl:.2f}" if pnl >= 0 else f"-${abs(pnl):.2f}"
+            health = p._get_health_status()
+            be_mark = " 🔒" if p.is_breakeven_active else ""
+            tp_mark = " · TP1✓" if p.tp1_hit else ""
+            pos_lines.append(
+                f"`{p.ticker}` ×{int(p.qty) if p.qty == int(p.qty) else p.qty} @ ${p.entry_price:.2f} → "
+                f"${p.current_price:.2f} ({pnl_str})\n"
+                f"  SL ${p.current_sl:.2f} · {health}{be_mark}{tp_mark}"
+            )
+        parts.append("\n".join(pos_lines))
+
+    if total_tax > 0:
+        parts.append(f"💰 Tax reserve: ${total_tax:.2f}")
+
+    parts.append("_⚠️ Not financial advice._")
+    return "\n\n".join(parts)
+
+
 def main():
     parser = argparse.ArgumentParser(description="OpenClaw Trade Tracker")
     subparsers = parser.add_subparsers(dest="command")
@@ -65,7 +114,9 @@ def main():
     add_parser.add_argument("--tp1", type=float, help="Target Profit 1 (Ladder Exit)")
     
     # LIST/UPDATE
-    subparsers.add_parser("monitor", help="Update market data and show status")
+    monitor_parser = subparsers.add_parser("monitor", help="Update market data and show status")
+    monitor_parser.add_argument("--notify", action="store_true",
+                                 help="Push the monitor summary to Telegram via TELEGRAM_TOKEN/TELEGRAM_CHAT_ID")
     
     # SIZE
     size_parser = subparsers.add_parser("size", help="Calculate position size (Kelly)")
@@ -91,25 +142,30 @@ def main():
     elif args.command == "monitor":
         print("\n🔍 Syncing Market Data...")
         report, alerts = service.update_market()
-        
+
         print("\n=== Active Positions ===")
         if not report:
             print("No active positions.")
         for line in report:
             print(line)
-            
+
         print("\n=== Alerts ===")
         if not alerts:
             print("No actionable alerts.")
         for alert in alerts:
             print(alert)
-            
+
         # Generate Tax View
         tax_str, total_tax = service.generate_tax_preview()
         if total_tax > 0:
             print(f"\n💰 Tax Reserve Needed: ${total_tax:.2f}")
-        
+
         save_positions(service) # Save state updates (e.g. SL moves)
+
+        if args.notify:
+            from src.core.notifier import send_telegram_report
+            msg = _build_telegram_summary(service, report, alerts, total_tax)
+            send_telegram_report(msg)
         
     elif args.command == "size":
         rec = service.get_sizing_recommendation(args.ticker, args.price, args.sl, args.winrate)
