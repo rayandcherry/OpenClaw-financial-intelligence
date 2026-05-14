@@ -80,11 +80,13 @@ class Portfolio:
         cost = price * qty
         if self.cash < cost:
             return False # Insufficient funds
-            
+
         self.cash -= cost
-        
-        # Instantiate PositionManager
-        pos = PositionManager(ticker, price, qty, side, atr_at_entry=atr, tp1=tp, risk_params=risk_params)
+
+        # Instantiate PositionManager — pass the strategy-designed SL through so
+        # the position honors the same stop that sizing was calculated against.
+        pos = PositionManager(ticker, price, qty, side, atr_at_entry=atr, tp1=tp,
+                              initial_sl=sl, risk_params=risk_params)
         # Store metadata that PositionManager doesn't care about but Backtester does
         pos.strategy = strategy
         pos.entry_date = date
@@ -242,34 +244,33 @@ class Backtester:
                 if row['Close'] < 5:
                     continue
 
-                scan_res = None
-
-                # 1. Trinity
+                # Collect every strategy that fires today, then pick the one
+                # with highest confidence. (Old code did first-match dispatch,
+                # which silenced PANIC whenever TRINITY happened to fire with a
+                # decay-penalized confidence < min_confidence — discarding what
+                # would have been a valid PANIC trade.)
+                candidates_today = []
                 if "TRINITY" in strategies:
                     t_params = strategy_params.get('TRINITY') if strategy_params else None
                     trinity = check_trinity_setup(row, df_context, params=t_params)
                     if trinity:
-                        scan_res = trinity
-
-                # 2. Panic
-                if not scan_res and "PANIC" in strategies:
+                        candidates_today.append(trinity)
+                if "PANIC" in strategies:
                     p_params = strategy_params.get('PANIC') if strategy_params else None
                     panic = check_panic_setup(row, df_context, params=p_params)
                     if panic:
-                        scan_res = panic
-
-                # 3. 2B
-                if not scan_res and "2B" in strategies:
+                        candidates_today.append(panic)
+                if "2B" in strategies:
                     _2b = check_2b_setup(row, df_context)
                     if _2b:
-                        scan_res = _2b
-
-                # 4. Donchian
-                if not scan_res and "DONCHIAN" in strategies:
+                        candidates_today.append(_2b)
+                if "DONCHIAN" in strategies:
                     d_params = strategy_params.get('DONCHIAN') if strategy_params else None
                     donchian = check_donchian_setup(row, df_context, params=d_params)
                     if donchian:
-                        scan_res = donchian
+                        candidates_today.append(donchian)
+
+                scan_res = max(candidates_today, key=lambda x: x.get('confidence', 0)) if candidates_today else None
 
                 # Execute Entry on NEXT bar's Open
                 if scan_res:

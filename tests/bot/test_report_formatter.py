@@ -123,11 +123,11 @@ def test_fmt_track_line_skips_no_trades():
     assert _fmt_track_line({"roi": 0, "wr": 0, "trades": 0, "pnl": 0}) == ""
 
 
-def test_fmt_track_line_renders_with_sign():
-    pos = _fmt_track_line({"roi": 312.5, "wr": 71.4, "trades": 18, "pnl": 5000})
-    assert "ROI +312.5%" in pos and "WR 71.4%" in pos and "18 trades" in pos
-    neg = _fmt_track_line({"roi": -12.0, "wr": 40.0, "trades": 5, "pnl": -1200})
-    assert "ROI -12.0%" in neg
+def test_fmt_track_line_renders_wr_and_trades():
+    out = _fmt_track_line({"roi": 312.5, "wr": 71.4, "trades": 18, "pnl": 5000})
+    assert "WR 71.4%" in out and "18 trades" in out
+    # ROI intentionally dropped — misleading on single-ticker portfolio backtests.
+    assert "ROI" not in out
 
 
 def test_take_signal_includes_news_and_track(formatter):
@@ -140,7 +140,8 @@ def test_take_signal_includes_news_and_track(formatter):
         "news": "- NVIDIA Q1 beat: data center revenue strong\n- GTC keynote: roadmap unveiled",
     }
     report = formatter.format_report([signal], total_scanned=1)
-    assert "3y track: ROI +312.5%" in report
+    assert "3y track: WR 71.0%" in report
+    assert "18 trades" in report
     assert "📰 NVIDIA Q1 beat" in report
     assert "📰 GTC keynote" in report
 

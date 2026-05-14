@@ -282,9 +282,14 @@ def check_trinity_setup(row, df_context=None, params=None) -> dict:
         return None
 
     # --- DYNAMIC RISK MANAGEMENT ---
-    # Start with 2-ATR stop. If SMA200 sits ABOVE the ATR stop, keep the ATR
-    # stop (tighter). If SMA200 sits BELOW, clamp stop down to SMA200 so the
-    # trend line acts as a floor — but this widens risk, so track it.
+    # Pick the LOOSER of (2-ATR stop, SMA200) so the trade has maximum runway
+    # without invalidating the trend. Cases:
+    #   - SMA200 BELOW the 2-ATR stop (deep pullback room): extend stop down
+    #     to SMA200 — the trend line is the bottom of the runway. Wider risk,
+    #     hence the `clamped_to_sma` flag for sizing/labeling.
+    #   - SMA200 ABOVE / within the 2-ATR band: keep 2-ATR stop. SMA200 is
+    #     closer to entry than 2-ATR, but using it would over-tighten the stop
+    #     and get whipsawed on routine noise. The wider ATR stop wins.
     atr_stop = round(price - (2.0 * atr), 2)
     clamped_to_sma = sma200 < atr_stop
     stop_loss = round(min(atr_stop, sma200), 2) if clamped_to_sma else atr_stop
@@ -528,6 +533,10 @@ def check_donchian_setup(row, df_context=None, params=None) -> dict:
         confidence += 10
     if regime == 'Bull':
         confidence += 5
+    # Parity with Trinity (>60 → +10) / Panic (>70 → +15): reward
+    # tickers whose per-ticker history backs the strategy.
+    if stats.get('total', {}).get('wr', 0) > 65:
+        confidence += 10
     if stats.get('recent_decay'):
         confidence = 25
 
@@ -575,8 +584,10 @@ def check_panic_setup(row, df_context=None, params=None) -> dict:
     if rsi >= rsi_threshold:
         return None
 
-    # Logic 3: Capitulation Volume (RVOL > 1.2)
-    if rvol < 1.2:
+    # Logic 3: Capitulation Volume — threshold from config to stay aligned with
+    # backtest_regime_performance (which reads cfg.get('rvol_min')).
+    rvol_min = config.get('rvol_min', 1.2)
+    if rvol < rvol_min:
         return None
 
     # --- DYNAMIC RISK MANAGEMENT ---

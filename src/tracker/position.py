@@ -9,28 +9,39 @@ class PositionManager:
     Manages the lifecycle of a SINGLE active trade.
     Responsible for Dynamic Exits (Trailing Stop) and Ladder Profit Taking.
     """
-    def __init__(self, ticker, entry_price, qty, side='LONG', atr_at_entry=None, tp1=None, risk_params=None):
+    def __init__(self, ticker, entry_price, qty, side='LONG', atr_at_entry=None,
+                 tp1=None, initial_sl=None, risk_params=None):
         self.ticker = ticker
         self.entry_price = float(entry_price)
         self.qty = float(qty)
         self.side = side.upper()
         self.atr_at_entry = float(atr_at_entry) if atr_at_entry else (entry_price * 0.05) # Fallback
-        
+
         # Load Risk Params (Injection overrides Config)
         config = risk_params if risk_params else RISK_PARAMS
         self.sl_atr_mult = config.get('initial_sl_atr', 2.0)
         self.tp1_atr_mult = config.get('tp1_atr', 2.0)
         self.breakeven_atr = config.get('breakeven_trigger_atr', 1.5)
         self.trail_atr = config.get('trailing_stop_atr', 2.0)
-        
+
         # State
         self.current_price = self.entry_price
         self.highest_price = self.entry_price
         self.lowest_price = self.entry_price # For shorts
-        
-        # Dynamic Exit State
-        sl_dist = self.sl_atr_mult * self.atr_at_entry
-        self.initial_sl = self.entry_price - sl_dist if self.side == 'LONG' else self.entry_price + sl_dist
+
+        # Initial Stop Loss.
+        # If `initial_sl` is supplied (strategy designed the SL), use it directly
+        # so the position honors the same stop that sizing was based on.
+        # Otherwise fall back to the generic sl_atr_mult * ATR rule.
+        # NOTE: the strategy-supplied SL was historically dropped on the floor —
+        # PositionManager re-computed using RISK_PARAMS['initial_sl_atr']=3.0,
+        # making actual stops 1.5-3x wider than the report told the user (PANIC
+        # affected worst). The override fixes that mismatch.
+        if initial_sl is not None:
+            self.initial_sl = float(initial_sl)
+        else:
+            sl_dist = self.sl_atr_mult * self.atr_at_entry
+            self.initial_sl = self.entry_price - sl_dist if self.side == 'LONG' else self.entry_price + sl_dist
         self.current_sl = self.initial_sl
         self.is_breakeven_active = False
         

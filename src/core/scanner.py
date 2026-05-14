@@ -24,46 +24,36 @@ def process_ticker(ticker):
         latest = df.iloc[-1]
         last_date = str(latest.name)
         
-        # Check Strategies — dispatch order matches backtest.py:
-        # TRINITY → PANIC → 2B → DONCHIAN (first match wins).
-        trinity_result = check_trinity_setup(latest, df)
-        panic_result = check_panic_setup(latest, df)
-        reversal_result = check_2b_setup(latest, df)
-        donchian_result = check_donchian_setup(latest, df)
+        # Run all four strategy checks, then return the highest-confidence
+        # trigger. Confidence is per-strategy (not strictly comparable across
+        # strategies), but it's the best ranking signal available and avoids
+        # silencing a strong PANIC behind a decay-penalized TRINITY.
+        candidates = []
+        log_map = {
+            "trinity": "✅ FOUND TRINITY",
+            "panic": "🚨 FOUND PANIC",
+            "2b_reversal": "🔄 FOUND 2B REVERSAL",
+            "donchian": "🚀 FOUND DONCHIAN",
+        }
+        for fn in (check_trinity_setup, check_panic_setup, check_2b_setup, check_donchian_setup):
+            try:
+                res = fn(latest, df)
+            except Exception as e:
+                logger.error(f"{fn.__name__} failed for {ticker}: {e}")
+                continue
+            if res:
+                candidates.append(res)
 
-        if trinity_result:
-            logger.info(f"✅ FOUND TRINITY: {ticker}")
-            return {
-                "ticker": ticker,
-                "date": last_date,
-                **trinity_result
-            }
+        if not candidates:
+            return None
 
-        elif panic_result:
-            logger.info(f"🚨 FOUND PANIC: {ticker}")
-            return {
-                "ticker": ticker,
-                "date": last_date,
-                **panic_result
-            }
-
-        elif reversal_result:
-            logger.info(f"🔄 FOUND 2B REVERSAL: {ticker}")
-            return {
-                "ticker": ticker,
-                "date": last_date,
-                **reversal_result
-            }
-
-        elif donchian_result:
-            logger.info(f"🚀 FOUND DONCHIAN: {ticker}")
-            return {
-                "ticker": ticker,
-                "date": last_date,
-                **donchian_result
-            }
-
-        return None
+        winner = max(candidates, key=lambda x: x.get('confidence', 0))
+        logger.info(f"{log_map.get(winner['strategy'], '? FOUND')}: {ticker} (conf {winner.get('confidence')})")
+        return {
+            "ticker": ticker,
+            "date": last_date,
+            **winner,
+        }
 
     except Exception as e:
         logger.error(f"Error processing {ticker}: {e}")

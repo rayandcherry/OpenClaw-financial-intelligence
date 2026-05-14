@@ -122,17 +122,16 @@ def _fmt_news_lines(news_str: str | None, max_items: int = 2) -> list[str]:
 
 
 def _fmt_track_line(sim_stats: dict | None) -> str:
-    """Render the per-ticker 3y mini-backtest stats. Empty string when there
-    were no trades on this ticker over the lookback (not informative)."""
+    """Render the per-ticker 3y mini-backtest stats. WR + trade count only —
+    the single-ticker portfolio ROI is dominated by idle cash and reads
+    misleadingly small (e.g. 4% for NVDA). Empty when no trades fired."""
     if not sim_stats:
         return ""
     trades = sim_stats.get("trades", 0) or 0
     if trades == 0:
         return ""
-    roi = sim_stats.get("roi", 0) or 0
     wr = sim_stats.get("wr", 0) or 0
-    sign = "+" if roi >= 0 else ""
-    return f"  3y track: ROI {sign}{roi}% / WR {wr}% / {trades} trades"
+    return f"  3y track: WR {wr}% / {trades} trades"
 
 
 def _fmt_signal_line(signal: dict, include_plan: bool) -> str:

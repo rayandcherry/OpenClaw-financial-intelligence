@@ -92,7 +92,8 @@ STRATEGY_PARAMS = {
         "bb_length": 20,
         "bb_std": 2.0,
         "rsi_period": 14,
-        "rsi_oversold": 30   # Deep value / panic threshold
+        "rsi_oversold": 30,  # Deep value / panic threshold
+        "rvol_min": 1.2      # Capitulation volume floor
     },
     "2B": {
         "lookback_min": 20,
@@ -150,24 +151,29 @@ PRESET_WATCHLISTS = {
     "AI Robotics": ["TSLA", "SYM", "ROK", "ZBRA"],
 }
 
-# Strategy edge stats from 3y AI universe portfolio backtest. Refreshed
-# 2026-05-13. Update when AI_LIST changes materially or quarterly. Used by
-# core/report_builder.py to classify signals (TAKE / WATCH / SKIP).
+# Strategy edge stats from 3y AI universe solo backtests. Refreshed
+# 2026-05-14 AFTER the SL alignment correctness pass — earlier numbers
+# (Trinity 67.6%, Panic 81.0% etc.) were inflated because PositionManager
+# silently widened every stop to 3×ATR regardless of strategy design.
+# Refreshed numbers honor each strategy's intended SL (Trinity/Donchian
+# 2×ATR, Panic 1×ATR). Re-run after material AI_LIST changes via:
+#   simulate.py --mode AI --strategy <NAME> --period 3y
+# Used by core/report_builder.py to classify signals (TAKE / WATCH / SKIP).
 STRATEGY_EDGE_STATS = {
     "trinity": {
-        "wr_pct": 67.6, "avg_pnl": 186, "trades": 296, "edge": "positive",
+        "wr_pct": 68.5, "avg_pnl": 164, "trades": 336, "edge": "positive",
         "label": "workhorse",
     },
     "panic": {
-        "wr_pct": 81.0, "avg_pnl": 469, "trades": 63, "edge": "positive",
-        "label": "rare but huge",
+        "wr_pct": 42.9, "avg_pnl": 117, "trades": 238, "edge": "positive",
+        "label": "high-RR scalp",
     },
     "2b_reversal": {
         "wr_pct": 55.8, "avg_pnl": -44, "trades": 104, "edge": "negative",
         "label": "negative edge",
     },
     "donchian": {
-        "wr_pct": 69.3, "avg_pnl": 182, "trades": 270, "edge": "positive",
+        "wr_pct": 62.1, "avg_pnl": 196, "trades": 311, "edge": "positive",
         "label": "trend breakout",
     },
 }

@@ -38,6 +38,23 @@ class TestPositionManager(unittest.TestCase):
         res = pos.update(105.0, 2.0)
         self.assertEqual(res['action'], "EXIT_STOP_LOSS")
 
+    def test_initial_sl_override(self):
+        """Strategy-supplied SL must take precedence over RISK_PARAMS default."""
+        # RISK_PARAMS would compute SL = 100 - 3*2 = 94. Strategy says 96.
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0, initial_sl=96.0)
+        self.assertEqual(pos.current_sl, 96.0)
+        self.assertEqual(pos.initial_sl, 96.0)
+
+        # Short side too.
+        pos_short = PositionManager("TEST", 100, 10, side="SHORT", atr_at_entry=2.0, initial_sl=104.0)
+        self.assertEqual(pos_short.current_sl, 104.0)
+
+    def test_initial_sl_fallback(self):
+        """When initial_sl not provided, fall back to RISK_PARAMS multiplier."""
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0)
+        # 100 - 3.0 * 2.0 = 94.0 (RISK_PARAMS.initial_sl_atr=3.0)
+        self.assertEqual(pos.current_sl, 94.0)
+
     def test_ladder_exit(self):
         """Test TP1 Logic"""
         # Entry 100, ATR 2. Default TP1 = 104
