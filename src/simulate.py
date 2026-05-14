@@ -13,7 +13,7 @@ def main():
     parser.add_argument('--mode', type=str, default='US', choices=['US', 'AI', 'CRYPTO', 'ALL', 'SP100'], help='Asset class to backtest')
     parser.add_argument('--period', type=str, default='3y', help='Data lookback period (e.g. 1y, 2y, 3y)')
     parser.add_argument('--optimize', action='store_true', help='Run optimization loop to find best parameters')
-    parser.add_argument('--strategy', type=str, help='Filter for specific strategy (TRINITY, PANIC, 2B)')
+    parser.add_argument('--strategy', type=str, help='Filter for specific strategy (TRINITY, PANIC, 2B, DONCHIAN)')
     
     parser.add_argument('--ticker', type=str, help='Specific ticker to simulate (overrides mode)')
     

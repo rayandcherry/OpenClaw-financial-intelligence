@@ -22,6 +22,7 @@ STRATEGY_DISPLAY = {
     "trinity": "Trinity",
     "panic": "Panic",
     "2b_reversal": "2B",
+    "donchian": "Donchian",
 }
 
 STRATEGY_EDGE_LABEL = {

@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from core.data_fetcher import fetch_data
-from core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup, check_2b_setup
+from core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup, check_2b_setup, check_donchian_setup
 try:
     from tracker.position import PositionManager
 except ImportError:
@@ -263,6 +263,13 @@ class Backtester:
                     _2b = check_2b_setup(row, df_context)
                     if _2b:
                         scan_res = _2b
+
+                # 4. Donchian
+                if not scan_res and "DONCHIAN" in strategies:
+                    d_params = strategy_params.get('DONCHIAN') if strategy_params else None
+                    donchian = check_donchian_setup(row, df_context, params=d_params)
+                    if donchian:
+                        scan_res = donchian
 
                 # Execute Entry on NEXT bar's Open
                 if scan_res:

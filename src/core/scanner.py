@@ -1,7 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.core.data_fetcher import fetch_data
-from src.core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup, check_2b_setup
+from src.core.indicators import calculate_indicators, check_trinity_setup, check_panic_setup, check_2b_setup, check_donchian_setup
 
 # Configure Logger
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -24,11 +24,13 @@ def process_ticker(ticker):
         latest = df.iloc[-1]
         last_date = str(latest.name)
         
-        # Check Strategies
+        # Check Strategies — dispatch order matches backtest.py:
+        # TRINITY → PANIC → 2B → DONCHIAN (first match wins).
         trinity_result = check_trinity_setup(latest, df)
         panic_result = check_panic_setup(latest, df)
         reversal_result = check_2b_setup(latest, df)
-        
+        donchian_result = check_donchian_setup(latest, df)
+
         if trinity_result:
             logger.info(f"✅ FOUND TRINITY: {ticker}")
             return {
@@ -36,7 +38,7 @@ def process_ticker(ticker):
                 "date": last_date,
                 **trinity_result
             }
-            
+
         elif panic_result:
             logger.info(f"🚨 FOUND PANIC: {ticker}")
             return {
@@ -52,7 +54,15 @@ def process_ticker(ticker):
                 "date": last_date,
                 **reversal_result
             }
-            
+
+        elif donchian_result:
+            logger.info(f"🚀 FOUND DONCHIAN: {ticker}")
+            return {
+                "ticker": ticker,
+                "date": last_date,
+                **donchian_result
+            }
+
         return None
 
     except Exception as e:

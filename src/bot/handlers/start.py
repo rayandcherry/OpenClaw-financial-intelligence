@@ -19,8 +19,8 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         "Welcome to *OpenClaw* 🦞\n\n"
-        "I scan markets for trading signals using three strategies "
-        "(Trinity, Panic, 2B) and deliver intelligence reports right here.\n\n"
+        "I scan markets for trading signals using four strategies "
+        "(Trinity, Panic, 2B, Donchian) and deliver intelligence reports right here.\n\n"
         "*Quick setup — pick a watchlist:*\n"
         "Or just type /scan AAPL to try it now."
     )

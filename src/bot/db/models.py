@@ -17,7 +17,7 @@ class User(Base):
     username = Column(Text, nullable=True)
     lang = Column(Text, nullable=False, default="EN")
     scan_mode = Column(Text, nullable=False, default="US")
-    strategies = Column(JSON, nullable=False, default=["TRINITY", "PANIC"])
+    strategies = Column(JSON, nullable=False, default=["TRINITY", "PANIC", "DONCHIAN"])
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

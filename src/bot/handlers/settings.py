@@ -59,7 +59,7 @@ async def mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Scan mode set to US.")
 
 
-ALL_STRATEGIES = ["TRINITY", "PANIC", "2B"]
+ALL_STRATEGIES = ["TRINITY", "PANIC", "2B", "DONCHIAN"]
 
 
 async def strategies_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

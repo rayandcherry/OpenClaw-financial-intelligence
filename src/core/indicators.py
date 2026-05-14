@@ -58,7 +58,17 @@ def calculate_indicators(df):
     
     # ATR 14 smoothing
     df['ATR_14'] = tr.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
-    
+
+    # --- 5b. Donchian channels + ATR volatility regime (Modern Turtle inputs) ---
+    # shift(1) so today's bar can't be both the prior high AND the breakout
+    # — we want "yesterday's 55-day max", i.e. the level being broken.
+    donchian_cfg = STRATEGY_PARAMS.get('DONCHIAN', {})
+    lookback = donchian_cfg.get('lookback', 55)
+    atr_med_win = donchian_cfg.get('atr_median_window', 100)
+    df[f'DONCHIAN_HIGH_{lookback}'] = high.rolling(window=lookback).max().shift(1)
+    df[f'DONCHIAN_LOW_{lookback}'] = low.rolling(window=lookback).min().shift(1)
+    df[f'ATR_MEDIAN_{atr_med_win}'] = df['ATR_14'].rolling(window=atr_med_win).median()
+
     # --- 6. Market Regime Classification ---
     # Bull: Price > SMA200 & SMA200 Rising (20-day net change)
     # Bear: Price < SMA200 & SMA200 Falling
@@ -116,6 +126,25 @@ def backtest_regime_performance(df, strategy_type, params=None):
                   (df['RSI_14'] < rsi_oversold) & \
                   (df['RVOL'] > rvol_min)
         tp_mult, sl_mult = 3.0, 1.0
+
+    elif strategy_type == 'donchian':
+        cfg = params if params else STRATEGY_PARAMS['DONCHIAN']
+        lookback = cfg.get('lookback', 55)
+        atr_med_win = cfg.get('atr_median_window', 100)
+        require_uptrend = cfg.get('require_uptrend', True)
+        require_vol_expansion = cfg.get('require_vol_expansion', True)
+        sl_mult = cfg.get('sl_atr_mult', 2.0)
+        tp_mult = cfg.get('tp_atr_mult', 4.0)
+
+        donchian_col = f'DONCHIAN_HIGH_{lookback}'
+        atr_med_col = f'ATR_MEDIAN_{atr_med_win}'
+
+        # Donchian breakout: Close > yesterday's N-day high
+        signals = df['Close'] > df[donchian_col]
+        if require_uptrend:
+            signals = signals & (df['Close'] > df['SMA_200'])
+        if require_vol_expansion:
+            signals = signals & (df['ATR_14'] > df[atr_med_col])
     
     signal_indices = df.index[signals].tolist()
     
@@ -433,6 +462,94 @@ def check_2b_setup(row, df_context=None) -> dict:
         },
         "side": "SHORT" if "Bearish" in signal_type else "LONG"
     }
+
+def check_donchian_setup(row, df_context=None, params=None) -> dict:
+    """
+    Donchian Breakout (Modern Turtle):
+    1. Close breaks above 55-day Donchian high (excludes today via shift(1)).
+    2. Uptrend filter: Price > SMA200 — skips bear-market false breakouts.
+    3. Volatility expansion: ATR > 100-day median ATR — real moves come with vol.
+    4. ATR-based stop (2x) + TP (4x, 1:2 RR). Trailing stop in PositionManager
+       takes over after the breakeven trigger, so big runners aren't capped.
+    """
+    config = params if params else STRATEGY_PARAMS['DONCHIAN']
+    lookback = config.get('lookback', 55)
+    atr_med_win = config.get('atr_median_window', 100)
+    sl_mult = config.get('sl_atr_mult', 2.0)
+    tp_mult = config.get('tp_atr_mult', 4.0)
+    require_uptrend = config.get('require_uptrend', True)
+    require_vol_expansion = config.get('require_vol_expansion', True)
+
+    price = row['Close']
+    donchian_high = row.get(f'DONCHIAN_HIGH_{lookback}')
+    sma200 = row.get('SMA_200')
+    atr = row.get('ATR_14')
+    atr_median = row.get(f'ATR_MEDIAN_{atr_med_win}')
+    regime = row.get('Regime', 'Unknown')
+
+    if pd.isna(donchian_high) or pd.isna(sma200) or pd.isna(atr) or pd.isna(atr_median):
+        return None
+
+    # Logic 1: Breakout
+    if price <= donchian_high:
+        return None
+
+    # Logic 2: Uptrend filter
+    if require_uptrend and price <= sma200:
+        return None
+
+    # Logic 3: Volatility expansion
+    if require_vol_expansion and atr <= atr_median:
+        return None
+
+    # --- Risk plan ---
+    stop_loss = round(price - (sl_mult * atr), 2)
+    take_profit = round(price + (tp_mult * atr), 2)
+
+    # --- Regime backtest ---
+    default_stats = {
+        "total": {"wr": 0, "count": 0},
+        "bull": {"wr": 0, "count": 0},
+        "bear": {"wr": 0, "count": 0},
+        "sideways": {"wr": 0, "count": 0},
+        "recent_decay": False,
+        "warning": None,
+    }
+    stats = backtest_regime_performance(df_context, 'donchian', params=config) if df_context is not None else default_stats
+
+    # Confidence: base 75, +10 strong breakout (>1 ATR above prior high),
+    # +5 confirmed Bull regime, -50 if recent decay detected.
+    breakout_dist = price - donchian_high
+    strong_breakout = breakout_dist > atr
+    breakout_pct = breakout_dist / donchian_high if donchian_high > 0 else 0
+
+    confidence = 75
+    if strong_breakout:
+        confidence += 10
+    if regime == 'Bull':
+        confidence += 5
+    if stats.get('recent_decay'):
+        confidence = 25
+
+    return {
+        "strategy": "donchian",
+        "price": price,
+        "confidence": confidence,
+        "metrics": {
+            "donchian_high": round(donchian_high, 2),
+            "breakout_pct": f"{round(breakout_pct*100, 2)}%",
+            "atr_expansion": f"{round((atr/atr_median - 1)*100, 1)}%" if atr_median > 0 else "n/a",
+            "regime": regime,
+        },
+        "stats": stats,
+        "plan": {
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "risk_reward": "1:2 (ATR Based)",
+        },
+        "side": "LONG",
+    }
+
 
 def check_panic_setup(row, df_context=None, params=None) -> dict:
     """

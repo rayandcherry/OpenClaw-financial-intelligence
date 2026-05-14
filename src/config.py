@@ -99,7 +99,20 @@ STRATEGY_PARAMS = {
         "lookback_max": 60,
         "rsi_period": 14,
         "sl_limit_pct": 0.05
-    }
+    },
+    "DONCHIAN": {
+        # Classic turtle S2 (55-day breakout). Modernized with:
+        #  - uptrend filter (Price > SMA200) to avoid bear-market whipsaws
+        #  - volatility expansion filter (ATR > 100-day median) for real breakouts
+        # Initial SL is 2 ATR; TP is 4 ATR (1:2 RR). PositionManager's trailing
+        # stop takes over after breakeven trigger, so big runners aren't capped.
+        "lookback": 55,
+        "atr_median_window": 100,
+        "sl_atr_mult": 2.0,
+        "tp_atr_mult": 4.0,
+        "require_uptrend": True,
+        "require_vol_expansion": True,
+    },
 }
 
 # --- Bot Configuration ---
@@ -111,7 +124,7 @@ BOT_CONFIG = {
     "default_schedule_times": ["08:00", "20:00"],
     "default_lang": "EN",
     "default_scan_mode": "US",
-    "default_strategies": ["TRINITY", "PANIC"],
+    "default_strategies": ["TRINITY", "PANIC", "DONCHIAN"],
 }
 
 PRESET_WATCHLISTS = {
@@ -152,5 +165,9 @@ STRATEGY_EDGE_STATS = {
     "2b_reversal": {
         "wr_pct": 55.8, "avg_pnl": -44, "trades": 104, "edge": "negative",
         "label": "negative edge",
+    },
+    "donchian": {
+        "wr_pct": 69.3, "avg_pnl": 182, "trades": 270, "edge": "positive",
+        "label": "trend breakout",
     },
 }

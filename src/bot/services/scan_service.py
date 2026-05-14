@@ -74,6 +74,7 @@ class ScanService:
         "trinity": {"trinity"},
         "panic": {"panic"},
         "2b": {"2b_reversal", "2b reversal", "2b"},
+        "donchian": {"donchian"},
     }
 
     def _filter_by_strategies(self, signals: list[dict], strategies: list[str] | None) -> list[dict]:
