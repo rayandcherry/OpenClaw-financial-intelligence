@@ -122,15 +122,19 @@ def _fmt_news_lines(news_str: str | None, max_items: int = 2) -> list[str]:
 
 
 def _fmt_track_line(sim_stats: dict | None) -> str:
-    """Render the per-ticker 3y mini-backtest stats. WR + trade count only —
-    the single-ticker portfolio ROI is dominated by idle cash and reads
-    misleadingly small (e.g. 4% for NVDA). Empty when no trades fired."""
+    """Render the per-ticker 3y mini-backtest stats. Shows raw WR alongside
+    a Wilson 95% lower bound — small samples get visibly honest credit
+    instead of a misleadingly tight headline number. ROI is dropped because
+    single-ticker portfolio ROI is dominated by idle cash."""
     if not sim_stats:
         return ""
     trades = sim_stats.get("trades", 0) or 0
     if trades == 0:
         return ""
     wr = sim_stats.get("wr", 0) or 0
+    wr_lb = sim_stats.get("wr_lb")
+    if wr_lb is not None and wr_lb > 0:
+        return f"  3y track: WR {wr}% (≥{wr_lb}% CI) / {trades} trades"
     return f"  3y track: WR {wr}% / {trades} trades"
 
 

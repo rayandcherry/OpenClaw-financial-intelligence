@@ -130,17 +130,31 @@ def test_fmt_track_line_renders_wr_and_trades():
     assert "ROI" not in out
 
 
+def test_fmt_track_line_shows_wilson_lb_when_present():
+    out = _fmt_track_line({"wr": 75.0, "wr_lb": 55.0, "trades": 24, "pnl": 1200})
+    assert "WR 75.0%" in out
+    assert "≥55.0% CI" in out
+    assert "24 trades" in out
+
+
+def test_fmt_track_line_omits_ci_when_lb_zero():
+    """LB of 0 means edge case (all losses or single trade); skip the CI hint."""
+    out = _fmt_track_line({"wr": 0.0, "wr_lb": 0.0, "trades": 1, "pnl": -50})
+    assert "CI" not in out
+
+
 def test_take_signal_includes_news_and_track(formatter):
     signal = {
         "ticker": "NVDA", "strategy": "donchian", "confidence": 90, "price": 235.09,
         "stats": {}, "metrics": {"regime": "Bull"},
         "plan": {"stop_loss": 220.72, "take_profit": 263.83, "risk_reward": "1:2 (ATR Based)"},
         "side": "LONG",
-        "sim_stats": {"roi": 312.5, "wr": 71.0, "trades": 18, "pnl": 5000},
+        "sim_stats": {"roi": 312.5, "wr": 71.0, "wr_lb": 50.0, "trades": 18, "pnl": 5000},
         "news": "- NVIDIA Q1 beat: data center revenue strong\n- GTC keynote: roadmap unveiled",
     }
     report = formatter.format_report([signal], total_scanned=1)
     assert "3y track: WR 71.0%" in report
+    assert "≥50.0% CI" in report
     assert "18 trades" in report
     assert "📰 NVIDIA Q1 beat" in report
     assert "📰 GTC keynote" in report

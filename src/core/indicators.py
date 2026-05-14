@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from src.config import STRATEGY_PARAMS
+from src.core.stats import wilson_score_interval
 
 def calculate_indicators(df):
     """
@@ -204,29 +205,40 @@ def backtest_regime_performance(df, strategy_type, params=None):
     # 3. Aggregate Stats
     df_res = pd.DataFrame(results)
     stats = {
-        "total": {"wr": 0, "count": 0},
-        "bull": {"wr": 0, "count": 0},
-        "bear": {"wr": 0, "count": 0},
-        "sideways": {"wr": 0, "count": 0},
+        "total": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "bull": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "bear": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "sideways": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
         "recent_decay": False,
         "warning": None
     }
-    
+
     if df_res.empty:
         return stats
 
-    # Calculate Win Rates Helper
+    # Win-rate helper now also returns the Wilson 95% bounds so callers can
+    # see how much sample size is backing the raw WR.
     def calc_wr(d):
-        if d.empty: return 0, 0
+        if d.empty: return 0, 0, 0, 0
         wins = len(d[d['outcome'] == 'win'])
         total = len(d[d['outcome'].isin(['win', 'loss'])]) # Exclude 'hold' from denominator
-        if total == 0: return 0, 0
-        return round((wins / total) * 100, 1), total
+        if total == 0: return 0, 0, 0, 0
+        wr = round((wins / total) * 100, 1)
+        lb, ub = wilson_score_interval(wins, total)
+        return wr, total, lb, ub
 
-    stats['total']['wr'], stats['total']['count'] = calc_wr(df_res)
-    stats['bull']['wr'], stats['bull']['count'] = calc_wr(df_res[df_res['regime'] == 'Bull'])
-    stats['bear']['wr'], stats['bear']['count'] = calc_wr(df_res[df_res['regime'] == 'Bear'])
-    stats['sideways']['wr'], stats['sideways']['count'] = calc_wr(df_res[df_res['regime'] == 'Sideways'])
+    for bucket, mask in [
+        ('total', None),
+        ('bull', df_res['regime'] == 'Bull'),
+        ('bear', df_res['regime'] == 'Bear'),
+        ('sideways', df_res['regime'] == 'Sideways'),
+    ]:
+        subset = df_res if mask is None else df_res[mask]
+        wr, count, lb, ub = calc_wr(subset)
+        stats[bucket]['wr'] = wr
+        stats[bucket]['count'] = count
+        stats[bucket]['wr_lb'] = lb
+        stats[bucket]['wr_ub'] = ub
 
     # 4. Self-Correction (Recent 14 Days vs Total)
     # Check trades in the last 14 days of data available in the DF
@@ -235,7 +247,7 @@ def backtest_regime_performance(df, strategy_type, params=None):
     recent_trades = df_res[df_res['date'] >= recent_cutoff]
     
     if not recent_trades.empty:
-        recent_wr, recent_count = calc_wr(recent_trades)
+        recent_wr, recent_count, _, _ = calc_wr(recent_trades)
         # Threshold: If recent WR < 50% of Total WR AND trade count >= 2
         if recent_count >= 2 and recent_wr < (stats['total']['wr'] * 0.5):
             stats['recent_decay'] = True
@@ -300,10 +312,10 @@ def check_trinity_setup(row, df_context=None, params=None) -> dict:
     # --- REGIME BACKTEST ---
     # Ensure stats structure is always returned even if df_context is None
     default_stats = {
-        "total": {"wr": 0, "count": 0},
-        "bull": {"wr": 0, "count": 0},
-        "bear": {"wr": 0, "count": 0},
-        "sideways": {"wr": 0, "count": 0},
+        "total": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "bull": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "bear": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "sideways": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
         "recent_decay": False,
         "warning": None
     }
@@ -453,10 +465,10 @@ def check_2b_setup(row, df_context=None) -> dict:
             "regime": regime
         },
         "stats": {
-            "total": {"wr": 0, "count": 0},
-            "bull": {"wr": 0, "count": 0},
-            "bear": {"wr": 0, "count": 0},
-            "sideways": {"wr": 0, "count": 0},
+            "total": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+            "bull": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+            "bear": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+            "sideways": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
             "recent_decay": False,
             "warning": "New Strategy - Low Sample Size"
         },
@@ -513,10 +525,10 @@ def check_donchian_setup(row, df_context=None, params=None) -> dict:
 
     # --- Regime backtest ---
     default_stats = {
-        "total": {"wr": 0, "count": 0},
-        "bull": {"wr": 0, "count": 0},
-        "bear": {"wr": 0, "count": 0},
-        "sideways": {"wr": 0, "count": 0},
+        "total": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "bull": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "bear": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
+        "sideways": {"wr": 0, "count": 0, "wr_lb": 0, "wr_ub": 0},
         "recent_decay": False,
         "warning": None,
     }

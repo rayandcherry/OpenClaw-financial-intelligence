@@ -354,21 +354,27 @@ Trade History (Last 50):
 
     def get_summary_metrics(self):
         """Returns concise metrics for programmatic use."""
+        from src.core.stats import wilson_score_interval
+
         hist = pd.DataFrame(self.portfolio.history)
         if hist.empty:
-            return {"roi": 0.0, "wr": 0.0, "trades": 0, "pnl": 0.0}
-            
+            return {"roi": 0.0, "wr": 0.0, "wr_lb": 0.0, "wr_ub": 0.0,
+                    "trades": 0, "pnl": 0.0}
+
         total_trades = len(hist)
         wins = len(hist[hist['profit'] > 0])
         wr = (wins / total_trades) * 100
+        wr_lb, wr_ub = wilson_score_interval(wins, total_trades)
         total_pnl = hist['profit'].sum()
-        
+
         final_equity = self.portfolio.equity_curve[-1]['equity']
         roi = ((final_equity - self.portfolio.initial_balance) / self.portfolio.initial_balance) * 100
-        
+
         return {
             "roi": round(roi, 2),
             "wr": round(wr, 1),
+            "wr_lb": wr_lb,
+            "wr_ub": wr_ub,
             "trades": total_trades,
             "pnl": round(total_pnl, 2)
         }
