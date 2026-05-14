@@ -5,9 +5,12 @@ from src.tracker.position import PositionManager
 from src.tracker.risk import CapitalAllocator
 from src.core.data_fetcher import fetch_data
 from src.core.indicators import calculate_indicators
+from src.config import ACCOUNT_BALANCE
 
 class TrackerService:
-    def __init__(self, initial_balance=100000):
+    def __init__(self, initial_balance=None):
+        if initial_balance is None:
+            initial_balance = ACCOUNT_BALANCE
         self.positions = {} # {ticker: PositionManager}
         self.risk_manager = CapitalAllocator(initial_balance)
         self.balance = initial_balance

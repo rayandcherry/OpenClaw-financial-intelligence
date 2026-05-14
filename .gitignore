@@ -29,9 +29,14 @@ build/
 .idea/
 *.swp
 
-# Data cache
+# Data cache + personal portfolio state
 data/cache/
+data/positions.json
+src/data/
 *.json.bak
+
+# Claude Code local state
+.claude/
 
 # Test artifacts
 .pytest_cache/

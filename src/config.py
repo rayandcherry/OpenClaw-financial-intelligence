@@ -1,6 +1,14 @@
 """
 Configuration for OpenClaw Financial Intelligence.
 """
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Trading account size — used by tracker sizing (Kelly + VaR cap).
+# Override via ACCOUNT_BALANCE env var. Default reflects current personal account.
+ACCOUNT_BALANCE = float(os.getenv("ACCOUNT_BALANCE", "30000"))
 
 # Asset Lists
 
