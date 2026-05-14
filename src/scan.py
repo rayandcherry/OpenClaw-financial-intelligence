@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from config import US_STOCKS, AI_LIST
 from core.scanner import scan_market
-from core.news import get_market_news
+from core.news import get_market_news, news_query_for_ticker
 from core.notifier import send_telegram_report
 from core.report_builder import build_report
 from backtest import Backtester
@@ -48,7 +48,7 @@ def _enrich_signals(candidates):
         c["sim_stats"] = sim_stats
 
         try:
-            c["news"] = get_market_news(f"{c['ticker']} stock news", max_results=2)
+            c["news"] = get_market_news(news_query_for_ticker(c["ticker"]), max_results=2)
         except Exception as e:
             print(f"⚠️ News fetch failed for {c['ticker']}: {e}")
             c["news"] = None

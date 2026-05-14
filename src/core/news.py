@@ -13,6 +13,37 @@ _SANITIZE_RE = re.compile(r'[`\r\n]+')
 # Freshness: drop anything older than this when we can parse a date.
 _MAX_AGE_DAYS = 14
 
+# Tickers whose symbol alone is ambiguous to news engines (common words,
+# prepositions, very short two-letter codes). For these, prepend the company
+# name so DDG/Bing surface the right entity. Caught after a scan returned
+# StubHub/News Corp headlines for ticker "ON" (Onsemi).
+# Extend when adding word-like symbols to AI_LIST.
+_TICKER_COMPANY_NAMES = {
+    "AI": "C3.ai",
+    "ARM": "Arm Holdings",
+    "BE": "Bloom Energy",
+    "ET": "Energy Transfer",
+    "FN": "Fabrinet",
+    "NOW": "ServiceNow",
+    "ON": "Onsemi",
+    "SYM": "Symbotic",
+    "TT": "Trane Technologies",
+}
+
+
+def news_query_for_ticker(ticker: str) -> str:
+    """Build a disambiguated news search query for a ticker symbol.
+
+    For word-like or ambiguous tickers (see _TICKER_COMPANY_NAMES), prepend the
+    company name so search engines surface the right entity. Falls back to a
+    plain "<TICKER> stock news" query for unambiguous symbols.
+    """
+    sym = (ticker or "").upper().strip()
+    name = _TICKER_COMPANY_NAMES.get(sym)
+    if name:
+        return f"{name} {sym} stock news"
+    return f"{sym} stock news"
+
 
 def _sanitize(text: str) -> str:
     """Single-line, no-backticks — defensive against prompt injection via news."""

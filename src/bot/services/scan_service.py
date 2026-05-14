@@ -4,7 +4,7 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from src.core.scanner import scan_market
-from src.core.news import get_market_news
+from src.core.news import get_market_news, news_query_for_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,9 @@ class ScanService:
         )
 
     async def _fetch_news(self, ticker: str) -> str:
+        query = news_query_for_ticker(ticker)
         return await asyncio.wait_for(
-            asyncio.get_running_loop().run_in_executor(self._executor, get_market_news, ticker),
+            asyncio.get_running_loop().run_in_executor(self._executor, get_market_news, query),
             timeout=self.NEWS_TIMEOUT,
         )
 

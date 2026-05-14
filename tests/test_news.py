@@ -5,7 +5,7 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
-from core.news import get_market_news
+from core.news import get_market_news, news_query_for_ticker
 
 class TestNews(unittest.TestCase):
     
@@ -32,6 +32,30 @@ class TestNews(unittest.TestCase):
         
         result = get_market_news("NotExist stock news")
         self.assertEqual(result, "No recent news found.")
+
+class TestNewsQueryForTicker(unittest.TestCase):
+
+    def test_ambiguous_ticker_gets_company_name(self):
+        # "ON" alone returns headlines for unrelated companies (e.g. StubHub).
+        # Prepending "Onsemi" disambiguates.
+        self.assertEqual(news_query_for_ticker("ON"), "Onsemi ON stock news")
+
+    def test_unambiguous_ticker_unchanged(self):
+        self.assertEqual(news_query_for_ticker("NVDA"), "NVDA stock news")
+        self.assertEqual(news_query_for_ticker("MSFT"), "MSFT stock news")
+
+    def test_lowercase_input_normalized(self):
+        self.assertEqual(news_query_for_ticker("on"), "Onsemi ON stock news")
+        self.assertEqual(news_query_for_ticker("nvda"), "NVDA stock news")
+
+    def test_covers_known_problem_tickers(self):
+        # Sanity: every entry we put in _TICKER_COMPANY_NAMES resolves with
+        # disambiguating context (more words than the bare "<sym> stock news").
+        for sym in ("AI", "BE", "ET", "NOW", "ARM", "TT", "FN", "SYM", "ON"):
+            q = news_query_for_ticker(sym)
+            assert sym in q and "stock news" in q
+            assert len(q.split()) > 3, f"{sym} should have company name prepended (got {q!r})"
+
 
 if __name__ == '__main__':
     unittest.main()
