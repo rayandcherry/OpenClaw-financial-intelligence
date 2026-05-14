@@ -322,10 +322,12 @@ def check_trinity_setup(row, df_context=None, params=None) -> dict:
     
     stats = backtest_regime_performance(df_context, 'trinity', params=config) if df_context is not None else default_stats
     
-    # Confidence Score Calc
+    # Confidence Score Calc — use Wilson 95% LB rather than raw WR so small
+    # samples don't get rewarded for lucky streaks. Threshold lowered from
+    # 60 → 50 to keep the bonus reachable at ~30-trade per-ticker samples.
     confidence = 80 # Base
     if stats.get('recent_decay'): confidence = 20
-    if stats.get('total', {}).get('wr', 0) > 60: confidence += 10
+    if stats.get('total', {}).get('wr_lb', 0) > 50: confidence += 10
 
     return {
         "strategy": "trinity",
@@ -545,9 +547,11 @@ def check_donchian_setup(row, df_context=None, params=None) -> dict:
         confidence += 10
     if regime == 'Bull':
         confidence += 5
-    # Parity with Trinity (>60 → +10) / Panic (>70 → +15): reward
-    # tickers whose per-ticker history backs the strategy.
-    if stats.get('total', {}).get('wr', 0) > 65:
+    # Use Wilson 95% LB; threshold lowered from 65 → 55 to compensate for
+    # the LB's natural discount at ~30-trade samples. Donchian universe edge
+    # is 62.1%, so a Wilson LB > 55% means this ticker actually beats it
+    # with statistical room to spare.
+    if stats.get('total', {}).get('wr_lb', 0) > 55:
         confidence += 10
     if stats.get('recent_decay'):
         confidence = 25
@@ -609,10 +613,12 @@ def check_panic_setup(row, df_context=None, params=None) -> dict:
     # --- REGIME BACKTEST ---
     stats = backtest_regime_performance(df_context, 'panic', params=config) if df_context is not None else {}
 
-    # Confidence Score Calc
+    # Confidence Score Calc — Wilson LB > 60 (vs raw > 70). Panic has lower
+    # universe edge (42.9% WR) and noisier signals, so the threshold sits
+    # higher relative to Trinity/Donchian's LB cutoffs.
     confidence = 75 # Base for Panic (Riskier)
     if stats.get('recent_decay'): confidence = 15 # Severe penalty
-    if stats.get('total', {}).get('wr', 0) > 70: confidence += 15 # High reward if history supports
+    if stats.get('total', {}).get('wr_lb', 0) > 60: confidence += 15
 
     return {
         "strategy": "panic",
