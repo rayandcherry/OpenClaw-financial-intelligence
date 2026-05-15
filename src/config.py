@@ -47,6 +47,8 @@ AI_LIST = [
     "TTMI", "APH", "TEL",
     # Physical AI / Robotics (ROK shared with Power)
     "TSLA", "SYM", "ZBRA",
+    # Thematic ETFs — broad AI / semi / tech exposure
+    "SMH", "SOXX", "QQQ", "XLK", "IGV", "BOTZ", "AIQ",
 ]
 
 # US scan universe — aliased to AI_LIST. The original mixed list
@@ -157,6 +159,7 @@ PRESET_WATCHLISTS = {
     "AI Analog/Interconnect": ["MPWR", "TXN", "ADI", "ON", "MCHP", "WOLF",
                                 "TTMI", "APH", "TEL"],
     "AI Robotics": ["TSLA", "SYM", "ROK", "ZBRA"],
+    "AI ETFs": ["SMH", "SOXX", "QQQ", "XLK", "IGV", "BOTZ", "AIQ"],
 }
 
 # Strategy edge stats from 3y AI universe solo backtests. Refreshed
@@ -208,6 +211,14 @@ ASSET_TIERS = {
     "GEV": "C", "VST": "C", "CEG": "C", "VRT": "C",
     "KMI": "C", "WMB": "C", "ET": "C",
     "TSLA": "C",  # single-stock volatility, not a quality knock
+
+    # --- Thematic ETFs ---
+    # Broad-basket ETFs inherit Tier A by diversification: huge AUM, tight
+    # spreads, gap risk diluted across 25-100 holdings. SMH/SOXX track the
+    # same semi basket; QQQ/XLK overlap on mega-cap tech; IGV is software.
+    "SMH": "A", "SOXX": "A", "QQQ": "A", "XLK": "A", "IGV": "A",
+    # Thematic AI ETFs — smaller AUM, more concentrated, higher beta. Tier B.
+    "BOTZ": "B", "AIQ": "B",
 }
 
 
