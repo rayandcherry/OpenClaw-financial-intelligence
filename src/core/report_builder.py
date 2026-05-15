@@ -11,8 +11,10 @@ from typing import Iterable
 
 try:
     from src.config import PRESET_WATCHLISTS, STRATEGY_EDGE_STATS
+    from src.core.fed_calendar import format_calendar_block
 except ImportError:
     from config import PRESET_WATCHLISTS, STRATEGY_EDGE_STATS
+    from core.fed_calendar import format_calendar_block
 
 
 TELEGRAM_MAX_LENGTH = 4096
@@ -257,6 +259,7 @@ def build_report(
             f"{total_scanned} tickers · 0 signals\n\n"
             f"All quiet on the AI universe today.\n\n"
             f"{_strategy_edge_block()}\n\n"
+            f"{format_calendar_block(scan_date.date(), days_ahead=7)}\n\n"
             f"_⚠️ Not financial advice._"
         )
 
@@ -279,6 +282,7 @@ def build_report(
             parts.append(block)
 
     parts.append(_strategy_edge_block())
+    parts.append(format_calendar_block(scan_date.date(), days_ahead=7))
     parts.append(_layer_block(signals))
     parts.append("_⚠️ Not financial advice._")
 
