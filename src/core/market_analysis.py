@@ -105,11 +105,11 @@ def _fmt_pct(v: float) -> str:
 
 
 def _fmt_price(v: float, display: str) -> str:
-    """VIX and 10Y are quoted as raw numbers (no $). DXY too."""
-    if display in ("VIX", "10Y", "DXY"):
-        if display == "10Y":
-            # ^TNX is yield × 10; show as %
-            return f"{v / 10:.2f}%"
+    """VIX/DXY are quoted as raw numbers (no $). 10Y is a percentage."""
+    if display == "10Y":
+        # ^TNX returns yield in percentage points directly (4.46 = 4.46%).
+        return f"{v:.2f}%"
+    if display in ("VIX", "DXY"):
         return f"{v:.2f}"
     return f"${v:.2f}"
 
@@ -140,12 +140,7 @@ _COMMENTARY_PROMPT = """你是專業美股盤面分析師。基於以下今日�
 def _build_snapshot_text(readings: list[GaugeReading]) -> str:
     lines = []
     for r in readings:
-        if r.display == "10Y":
-            level = f"{r.last / 10:.2f}%"
-        elif r.display in ("VIX", "DXY"):
-            level = f"{r.last:.2f}"
-        else:
-            level = f"${r.last:.2f}"
+        level = _fmt_price(r.last, r.display)
         lines.append(f"- {r.display} {level} 今日 {r.chg_pct:+.2f}% / 5日 {r.chg_5d_pct:+.2f}%")
     return "\n".join(lines)
 

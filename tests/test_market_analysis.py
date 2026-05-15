@@ -47,7 +47,7 @@ def test_format_block_renders_all_lines():
     readings = [
         GaugeReading("SPY", "SPY", "標普500", 585.20, 0.41, 1.20),
         GaugeReading("^VIX", "VIX", "恐慌指數", 13.50, -1.20, -5.30),
-        GaugeReading("^TNX", "10Y", "10年期殖利率", 44.20, 0.05, 0.50),
+        GaugeReading("^TNX", "10Y", "10年期殖利率", 4.42, 0.05, 0.50),
         GaugeReading("DX-Y.NYB", "DXY", "美元指數", 104.20, 0.10, 0.30),
     ]
     block = format_market_block(readings, include_commentary=False)
@@ -55,7 +55,7 @@ def test_format_block_renders_all_lines():
     assert "SPY" in block
     assert "$585.20" in block
     assert "13.50" in block  # VIX no $ sign
-    assert "4.42%" in block  # 10Y = 44.20 / 10
+    assert "4.42%" in block  # 10Y already in percentage form
     assert "情緒" in block
 
 
