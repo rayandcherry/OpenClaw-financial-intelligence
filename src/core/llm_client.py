@@ -57,19 +57,3 @@ class GeminiClient:
                 continue
 
         return f"Error generating report after trying all models. Last error: {last_error}"
-
-    def generate_short(self, prompt: str) -> str:
-        """Freeform short generation with model fallback. Used for ad-hoc
-        summaries (e.g. market commentary) that don't need the structured
-        report template. Raises on full fallback exhaustion."""
-        last_error = None
-        for model_name in self.model_candidates:
-            try:
-                response = self.client.models.generate_content(
-                    model=model_name, contents=prompt
-                )
-                return response.text
-            except Exception as e:
-                last_error = e
-                continue
-        raise RuntimeError(f"All Gemini models failed. Last error: {last_error}")

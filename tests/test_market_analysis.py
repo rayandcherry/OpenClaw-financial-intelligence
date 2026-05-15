@@ -50,7 +50,7 @@ def test_format_block_renders_all_lines():
         GaugeReading("^TNX", "10Y", "10年期殖利率", 4.42, 0.05, 0.50),
         GaugeReading("DX-Y.NYB", "DXY", "美元指數", 104.20, 0.10, 0.30),
     ]
-    block = format_market_block(readings, include_commentary=False)
+    block = format_market_block(readings)
     assert "📈 *大盤*" in block
     assert "SPY" in block
     assert "$585.20" in block
@@ -60,7 +60,7 @@ def test_format_block_renders_all_lines():
 
 
 def test_format_block_empty():
-    block = format_market_block([], include_commentary=False)
+    block = format_market_block([])
     assert "暫無數據" in block
 
 
@@ -76,31 +76,13 @@ def test_format_block_with_commentary_string():
     assert "CPI 2.3%略低於預期" in block
 
 
-def test_format_block_skips_commentary_when_empty_string():
-    """Empty commentary string suppresses the 今日要點 section."""
+def test_format_block_no_commentary_section_by_default():
+    """Without commentary arg, the 今日要點 section should be absent."""
     readings = [
         GaugeReading("SPY", "SPY", "標普500", 585.20, 0.41, 1.20),
     ]
-    block = format_market_block(readings, commentary="")
+    block = format_market_block(readings)
     assert "今日要點" not in block
-
-
-def test_fetch_commentary_returns_empty_on_llm_failure():
-    """LLM exceptions should NOT propagate — report must still render."""
-    from src.core.market_analysis import fetch_market_commentary
-    readings = [
-        GaugeReading("SPY", "SPY", "標普500", 585.20, 0.41, 1.20),
-    ]
-    # Patch GeminiClient import inside fetch_market_commentary to raise.
-    with patch("src.core.llm_client.GeminiClient",
-                side_effect=RuntimeError("no API key")):
-        result = fetch_market_commentary(readings)
-    assert result == ""
-
-
-def test_fetch_commentary_returns_empty_for_empty_readings():
-    from src.core.market_analysis import fetch_market_commentary
-    assert fetch_market_commentary([]) == ""
 
 
 def test_fetch_market_snapshot_skips_failed_fetches():
