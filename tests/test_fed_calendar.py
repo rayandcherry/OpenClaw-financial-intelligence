@@ -76,19 +76,19 @@ def test_get_upcoming_events_year_crossover():
 def test_format_calendar_block_clear_window():
     # Pick a date with no events in next 0 days
     block = format_calendar_block(date(2026, 5, 16), days_ahead=0)  # Sat
-    assert "clear" in block
+    assert "無重要事件" in block
 
 
 def test_format_calendar_block_today_marker():
     today = date(2026, 5, 7)  # FOMC May
     block = format_calendar_block(today, days_ahead=0)
-    assert "🔴 TODAY" in block
-    assert "FOMC Rate Decision" in block
+    assert "🔴 今日" in block
+    assert "FOMC 利率決議" in block
 
 
 def test_format_calendar_block_tomorrow_marker():
     block = format_calendar_block(date(2026, 5, 6), days_ahead=1)
-    assert "🚨 TOMORROW" in block
+    assert "🚨 明日" in block
 
 
 def test_format_calendar_block_high_impact_marker():

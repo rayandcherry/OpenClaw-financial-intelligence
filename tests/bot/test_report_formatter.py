@@ -23,23 +23,29 @@ def formatter():
     return ReportFormatter()
 
 
+# All tests pass market_block="" so we skip the live yfinance fetch.
+_NO_MARKET = ""
+
+
 def test_format_report_with_signals(formatter, sample_signal):
-    report = formatter.format_report([sample_signal], total_scanned=25)
-    assert "1 signal" in report.lower()
+    report = formatter.format_report([sample_signal], total_scanned=25,
+                                       market_block=_NO_MARKET)
+    assert "1 訊號" in report
     assert "25" in report
     assert "NVDA" in report
     assert "Trinity" in report
 
 
 def test_format_report_no_signals(formatter):
-    report = formatter.format_report([], total_scanned=25)
-    assert "quiet" in report.lower()
-    assert "0 signal" in report.lower()
+    report = formatter.format_report([], total_scanned=25, market_block=_NO_MARKET)
+    assert "無訊號" in report
+    assert "0 訊號" in report
 
 
 def test_format_report_splits_long_messages(formatter, sample_signal):
     signals = [dict(sample_signal, ticker=f"T{i:03d}") for i in range(40)]
-    messages = formatter.format_report_messages(signals, total_scanned=100)
+    messages = formatter.format_report_messages(signals, total_scanned=100,
+                                                  market_block=_NO_MARKET)
     assert isinstance(messages, list)
     assert all(len(m) <= 4096 for m in messages)
     assert len(messages) >= 1
@@ -58,7 +64,7 @@ def test_classify_skip_for_2b_negative_edge():
     }
     verdict, reason = classify_signal(signal)
     assert verdict == "SKIP"
-    assert "negative" in reason.lower()
+    assert "負期望值" in reason
 
 
 def test_classify_skip_for_recent_decay():
@@ -69,7 +75,7 @@ def test_classify_skip_for_recent_decay():
     }
     verdict, reason = classify_signal(signal)
     assert verdict == "SKIP"
-    assert "decay" in reason.lower()
+    assert "衰退" in reason
 
 
 def test_classify_watch_for_moderate_confidence():
@@ -92,12 +98,12 @@ def test_report_shows_take_skip_buckets(formatter):
          "plan": {"stop_loss": 36.55, "take_profit": 18.34, "risk_reward": "1:3 (Fixed)"},
          "side": "SHORT"},
     ]
-    report = formatter.format_report(signals, total_scanned=75)
-    assert "Take" in report
-    assert "Skip" in report
+    report = formatter.format_report(signals, total_scanned=75, market_block=_NO_MARKET)
+    assert "推薦進場" in report
+    assert "略過" in report
     assert "DLR" in report
     assert "SMCI" in report
-    assert "Strategy edge" in report
+    assert "策略邊際" in report
 
 
 def test_fmt_news_lines_empty():
@@ -125,16 +131,16 @@ def test_fmt_track_line_skips_no_trades():
 
 def test_fmt_track_line_renders_wr_and_trades():
     out = _fmt_track_line({"roi": 312.5, "wr": 71.4, "trades": 18, "pnl": 5000})
-    assert "WR 71.4%" in out and "18 trades" in out
+    assert "勝率 71.4%" in out and "18 筆" in out
     # ROI intentionally dropped — misleading on single-ticker portfolio backtests.
     assert "ROI" not in out
 
 
 def test_fmt_track_line_shows_wilson_lb_when_present():
     out = _fmt_track_line({"wr": 75.0, "wr_lb": 55.0, "trades": 24, "pnl": 1200})
-    assert "WR 75.0%" in out
+    assert "勝率 75.0%" in out
     assert "≥55.0% CI" in out
-    assert "24 trades" in out
+    assert "24 筆" in out
 
 
 def test_fmt_track_line_omits_ci_when_lb_zero():
@@ -152,10 +158,10 @@ def test_take_signal_includes_news_and_track(formatter):
         "sim_stats": {"roi": 312.5, "wr": 71.0, "wr_lb": 50.0, "trades": 18, "pnl": 5000},
         "news": "- NVIDIA Q1 beat: data center revenue strong\n- GTC keynote: roadmap unveiled",
     }
-    report = formatter.format_report([signal], total_scanned=1)
-    assert "3y track: WR 71.0%" in report
+    report = formatter.format_report([signal], total_scanned=1, market_block=_NO_MARKET)
+    assert "3年: 勝率 71.0%" in report
     assert "≥50.0% CI" in report
-    assert "18 trades" in report
+    assert "18 筆" in report
     assert "📰 NVIDIA Q1 beat" in report
     assert "📰 GTC keynote" in report
 
@@ -170,9 +176,9 @@ def test_watch_signal_excludes_news_and_track(formatter):
         "sim_stats": {"roi": 100, "wr": 60, "trades": 10, "pnl": 1000},
         "news": "- Big headline: body",
     }
-    report = formatter.format_report([signal], total_scanned=1)
+    report = formatter.format_report([signal], total_scanned=1, market_block=_NO_MARKET)
     assert "📰" not in report
-    assert "3y track" not in report
+    assert "3年: 勝率" not in report
 
 
 def test_report_shows_layer_attribution(formatter):
@@ -182,5 +188,5 @@ def test_report_shows_layer_attribution(formatter):
          "plan": {"stop_loss": 170.32, "take_profit": 239.29, "risk_reward": "1:2"},
          "side": "LONG"},
     ]
-    report = formatter.format_report(signals, total_scanned=75)
-    assert "Infrastructure" in report  # DLR is in AI Infrastructure preset
+    report = formatter.format_report(signals, total_scanned=75, market_block=_NO_MARKET)
+    assert "資料中心" in report  # DLR is in AI Infrastructure → 資料中心

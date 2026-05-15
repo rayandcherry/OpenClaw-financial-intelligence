@@ -12,9 +12,11 @@ from typing import Iterable
 try:
     from src.config import PRESET_WATCHLISTS, STRATEGY_EDGE_STATS
     from src.core.fed_calendar import format_calendar_block
+    from src.core.market_analysis import format_market_block
 except ImportError:
     from config import PRESET_WATCHLISTS, STRATEGY_EDGE_STATS
     from core.fed_calendar import format_calendar_block
+    from core.market_analysis import format_market_block
 
 
 TELEGRAM_MAX_LENGTH = 4096
@@ -30,6 +32,34 @@ STRATEGY_DISPLAY = {
 STRATEGY_EDGE_LABEL = {
     "positive": "✓",
     "negative": "✗",
+}
+
+# 策略 label / 產業層 中文對照
+_STRATEGY_LABEL_CN = {
+    "workhorse": "主力",
+    "high-RR scalp": "高R短炒",
+    "negative edge": "負期望值",
+    "trend breakout": "趨勢突破",
+}
+
+_LAYER_CN = {
+    "Platforms": "平台軟體",
+    "Infrastructure": "資料中心",
+    "Silicon": "矽晶圓",
+    "Semi Equipment": "半導體設備",
+    "Networking": "網通",
+    "Server": "伺服器",
+    "Power": "電力",
+    "Cooling": "散熱",
+    "Analog/Interconnect": "類比/連接",
+    "Robotics": "機器人",
+    "ETFs": "ETF",
+}
+
+_REGIME_CN = {
+    "bull": "多頭",
+    "bear": "空頭",
+    "sideways": "盤整",
 }
 
 
@@ -81,22 +111,22 @@ def classify_signal(signal: dict) -> tuple[str, str | None]:
 
     if edge == "negative":
         stat = STRATEGY_EDGE_STATS[strategy_key]
-        return "SKIP", f"negative-edge strategy (3y ${stat['avg_pnl']}/trade)"
+        return "SKIP", f"負期望值策略 (3年 ${stat['avg_pnl']}/筆)"
 
     if stats.get("recent_decay"):
-        return "SKIP", "recent decay warning"
+        return "SKIP", "近期衰退警告"
 
     warning = stats.get("warning")
     if warning and "Low Sample" not in str(warning):
-        return "SKIP", "strategy warning"
+        return "SKIP", "策略警告"
 
     if confidence < 40:
-        return "SKIP", f"low confidence ({confidence})"
+        return "SKIP", f"信心不足 ({confidence})"
 
     if confidence >= 70:
         return "TAKE", None
 
-    return "WATCH", f"moderate confidence ({confidence})"
+    return "WATCH", f"中等信心 ({confidence})"
 
 
 def _fmt_news_lines(news_str: str | None, max_items: int = 2) -> list[str]:
@@ -136,8 +166,8 @@ def _fmt_track_line(sim_stats: dict | None) -> str:
     wr = sim_stats.get("wr", 0) or 0
     wr_lb = sim_stats.get("wr_lb")
     if wr_lb is not None and wr_lb > 0:
-        return f"  3y track: WR {wr}% (≥{wr_lb}% CI) / {trades} trades"
-    return f"  3y track: WR {wr}% / {trades} trades"
+        return f"  3年: 勝率 {wr}% (≥{wr_lb}% CI) / {trades} 筆"
+    return f"  3年: 勝率 {wr}% / {trades} 筆"
 
 
 def _fmt_signal_line(signal: dict, include_plan: bool) -> str:
@@ -145,12 +175,13 @@ def _fmt_signal_line(signal: dict, include_plan: bool) -> str:
     strategy_key = _normalize_strategy(signal.get("strategy", ""))
     strategy_name = STRATEGY_DISPLAY.get(strategy_key, strategy_key.title())
     side = _signal_side(signal)
+    side_cn = {"LONG": "多", "SHORT": "空"}.get(side, side)
     confidence = signal.get("confidence", "?")
     layers = _layers_for(ticker)
-    layer_label = ", ".join(layers) if layers else "—"
+    layer_label = ", ".join(_LAYER_CN.get(l, l) for l in layers) if layers else "—"
     price = signal.get("price")
 
-    header = f"`{ticker}`  {strategy_name} · {side} · conf {confidence} — _{layer_label}_"
+    header = f"`{ticker}`  {strategy_name} · {side_cn} · 信心 {confidence} — _{layer_label}_"
 
     if not include_plan:
         return header
@@ -182,22 +213,24 @@ def _regime_summary(signals: Iterable[dict]) -> str:
         if r:
             regimes[r] += 1
     if not regimes:
-        return "regime n/a"
+        return "市況不明"
     if len(regimes) == 1:
-        return f"regime {next(iter(regimes)).lower()}"
-    parts = [f"{r.lower()}×{n}" for r, n in regimes.most_common()]
-    return "regime mixed (" + ", ".join(parts) + ")"
+        key = next(iter(regimes)).lower()
+        return f"市況 {_REGIME_CN.get(key, key)}"
+    parts = [f"{_REGIME_CN.get(r.lower(), r.lower())}×{n}" for r, n in regimes.most_common()]
+    return "市況混合 (" + ", ".join(parts) + ")"
 
 
 def _strategy_edge_block() -> str:
-    lines = ["📊 *Strategy edge*  _(3y AI universe)_"]
+    lines = ["📊 *策略邊際*  _(3年 AI 標的池)_"]
     for key, stat in STRATEGY_EDGE_STATS.items():
         name = STRATEGY_DISPLAY.get(key, key)
         mark = STRATEGY_EDGE_LABEL.get(stat["edge"], "·")
         pnl = stat["avg_pnl"]
         pnl_str = f"+${pnl}" if pnl >= 0 else f"-${abs(pnl)}"
+        label_cn = _STRATEGY_LABEL_CN.get(stat["label"], stat["label"])
         lines.append(
-            f"• {name:<8} WR {stat['wr_pct']:.1f}% · {pnl_str}/trade · {mark} {stat['label']}"
+            f"• {name:<8} 勝率 {stat['wr_pct']:.1f}% · {pnl_str}/筆 · {mark} {label_cn}"
         )
     return "\n".join(lines)
 
@@ -215,10 +248,10 @@ def _layer_block(signals: list[dict]) -> str:
     if not by_layer:
         return ""
 
-    lines = ["🏭 *By AI layer*"]
+    lines = ["🏭 *AI 產業鏈分布*"]
     for layer in sorted(by_layer.keys()):
         entries = ", ".join(f"{t}{m}" for t, m in by_layer[layer])
-        lines.append(f"• {layer}: {entries}")
+        lines.append(f"• {_LAYER_CN.get(layer, layer)}: {entries}")
     return "\n".join(lines)
 
 
@@ -226,9 +259,9 @@ def _signal_block(verdict: str, signals: list[dict]) -> str:
     if not signals:
         return ""
     headers = {
-        "TAKE": "🎯 *Take*",
-        "WATCH": "👀 *Watch*",
-        "SKIP": "⚠️ *Skip*",
+        "TAKE": "🎯 *推薦進場*",
+        "WATCH": "👀 *觀察*",
+        "SKIP": "⚠️ *略過*",
     }
     title = f"{headers[verdict]} ({len(signals)})"
     body_lines = [title, ""]
@@ -246,21 +279,31 @@ def build_report(
     signals: list[dict],
     total_scanned: int,
     scan_date: datetime | None = None,
+    market_block: str | None = None,
 ) -> str:
     """Build a single-string scan report (may exceed Telegram limit; see
-    build_report_messages for chunking)."""
+    build_report_messages for chunking).
+
+    Order: header → 大盤 → Fed 日曆 → Take/Watch/Skip → 策略邊際 → AI 產業鏈 → 免責.
+    `market_block` defaults to a live fetch via market_analysis.format_market_block;
+    pass a pre-formatted string for testing or to skip the network call."""
     if scan_date is None:
         scan_date = datetime.now(timezone.utc)
-    date_str = scan_date.strftime("%b %d, %Y")
+    date_str = scan_date.strftime("%Y-%m-%d")
+
+    if market_block is None:
+        market_block = format_market_block()
+    calendar_block = format_calendar_block(scan_date.date(), days_ahead=7)
 
     if not signals:
         return (
-            f"*OpenClaw AI Scan*  ·  {date_str}\n"
-            f"{total_scanned} tickers · 0 signals\n\n"
-            f"All quiet on the AI universe today.\n\n"
+            f"*OpenClaw AI 掃描*  ·  {date_str}\n"
+            f"{total_scanned} 個標的 · 0 訊號\n\n"
+            f"{market_block}\n\n"
+            f"{calendar_block}\n\n"
+            f"AI 標的池今日無訊號。\n\n"
             f"{_strategy_edge_block()}\n\n"
-            f"{format_calendar_block(scan_date.date(), days_ahead=7)}\n\n"
-            f"_⚠️ Not financial advice._"
+            f"_⚠️ 非投資建議_"
         )
 
     # Bucket signals by verdict
@@ -270,21 +313,19 @@ def build_report(
         buckets[verdict].append(s)
 
     header = (
-        f"*OpenClaw AI Scan*  ·  {date_str}\n"
-        f"{total_scanned} tickers · {len(signals)} signal"
-        f"{'s' if len(signals) != 1 else ''} · {_regime_summary(signals)}"
+        f"*OpenClaw AI 掃描*  ·  {date_str}\n"
+        f"{total_scanned} 個標的 · {len(signals)} 訊號 · {_regime_summary(signals)}"
     )
 
-    parts = [header]
+    parts = [header, market_block, calendar_block]
     for verdict in ("TAKE", "WATCH", "SKIP"):
         block = _signal_block(verdict, buckets[verdict])
         if block:
             parts.append(block)
 
     parts.append(_strategy_edge_block())
-    parts.append(format_calendar_block(scan_date.date(), days_ahead=7))
     parts.append(_layer_block(signals))
-    parts.append("_⚠️ Not financial advice._")
+    parts.append("_⚠️ 非投資建議_")
 
     return "\n\n".join(p for p in parts if p)
 
@@ -293,9 +334,10 @@ def build_report_messages(
     signals: list[dict],
     total_scanned: int,
     scan_date: datetime | None = None,
+    market_block: str | None = None,
 ) -> list[str]:
     """Return the report split into Telegram-safe chunks."""
-    full = build_report(signals, total_scanned, scan_date)
+    full = build_report(signals, total_scanned, scan_date, market_block=market_block)
     if len(full) <= TELEGRAM_SAFE_CHUNK:
         return [full]
 

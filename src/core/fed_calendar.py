@@ -132,28 +132,57 @@ def get_upcoming_events(today: Optional[date] = None,
     return [e for e in cal if today <= e.date <= end]
 
 
+_EVENT_NAME_CN = {
+    "FOMC Rate Decision": "FOMC 利率決議",
+    "Beige Book": "褐皮書",
+    # Monthly econ events use a "{Type} ({Period})" pattern handled below.
+}
+
+_CATEGORY_CN = {
+    "NFP": "非農就業",
+    "CPI": "CPI 通膨",
+    "PCE": "Core PCE 通膨",
+    "Retail": "零售銷售",
+}
+
+_WEEKDAY_CN = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
+
+
+def _name_cn(event: "FedEvent") -> str:
+    if event.name in _EVENT_NAME_CN:
+        return _EVENT_NAME_CN[event.name]
+    if event.category in _CATEGORY_CN:
+        # Convert "NFP (Apr 2026)" -> "非農就業 (Apr 2026)"
+        try:
+            period = event.name.split("(", 1)[1].rstrip(")")
+            return f"{_CATEGORY_CN[event.category]} ({period})"
+        except IndexError:
+            return _CATEGORY_CN[event.category]
+    return event.name
+
+
 def format_calendar_block(today: Optional[date] = None,
                           days_ahead: int = 7) -> str:
-    """Telegram-Markdown-V1 block for the next `days_ahead` days.
-    Empty window → 'clear' line. Used by report_builder + standalone CLI."""
+    """Telegram-Markdown-V1 block 中文版。Empty window → '無重要事件'."""
     today = today or date.today()
     events = get_upcoming_events(today, days_ahead)
 
     if not events:
-        return f"📅 *Fed Calendar* _(next {days_ahead}d)_: clear"
+        return f"📅 *Fed 日曆* _(未來 {days_ahead} 天)_：無重要事件"
 
-    lines = [f"📅 *Fed Calendar* _(next {days_ahead}d)_"]
+    lines = [f"📅 *Fed 日曆* _(未來 {days_ahead} 天)_"]
     for e in events:
         delta = (e.date - today).days
         if delta == 0:
-            marker = "🔴 TODAY"
+            marker = "🔴 今日"
         elif delta == 1:
-            marker = "🚨 TOMORROW"
+            marker = "🚨 明日"
         elif delta <= 3:
             marker = f"⚠️ T+{delta}"
         else:
             marker = f"T+{delta}"
         impact = "🔥" if e.impact == "high" else "·"
-        lines.append(f"• {marker} {e.date:%a %b %d} {impact} {e.name}")
+        weekday = _WEEKDAY_CN[e.date.weekday()]
+        lines.append(f"• {marker} {weekday} {e.date:%m/%d} {impact} {_name_cn(e)}")
 
     return "\n".join(lines)
