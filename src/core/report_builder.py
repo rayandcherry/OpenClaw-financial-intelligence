@@ -13,10 +13,12 @@ try:
     from src.config import PRESET_WATCHLISTS, STRATEGY_EDGE_STATS
     from src.core.fed_calendar import format_calendar_block
     from src.core.market_analysis import format_market_block
+    from src.core.news import format_news_lines
 except ImportError:
     from config import PRESET_WATCHLISTS, STRATEGY_EDGE_STATS
     from core.fed_calendar import format_calendar_block
     from core.market_analysis import format_market_block
+    from core.news import format_news_lines
 
 
 TELEGRAM_MAX_LENGTH = 4096
@@ -43,6 +45,7 @@ _STRATEGY_LABEL_CN = {
 }
 
 _LAYER_CN = {
+    # AI industry layers
     "Platforms": "平台軟體",
     "Infrastructure": "資料中心",
     "Silicon": "矽晶圓",
@@ -54,6 +57,20 @@ _LAYER_CN = {
     "Analog/Interconnect": "類比/連接",
     "Robotics": "機器人",
     "ETFs": "ETF",
+    # Space industry layers
+    "Primes": "主承包商",
+    "Aerospace Components": "航太組件",
+    "Electronics": "電子/感測",
+    "Propulsion": "推進",
+    "Satellites & New Space": "衛星與新太空",
+    "Defense IT/Sensors": "國防 IT",
+}
+
+# Display name for each scan mode (used in report title + layer block header).
+_MODE_DISPLAY = {
+    "AI": "AI",
+    "SPACE": "Space",
+    "US": "AI",  # US universe is aliased to AI_LIST, see config.US_STOCKS
 }
 
 _REGIME_CN = {
@@ -71,23 +88,31 @@ def _normalize_strategy(strategy: str) -> str:
     return s
 
 
-def _build_layer_map() -> dict[str, list[str]]:
-    """Reverse index of AI presets: ticker -> list of layer names."""
+def _build_layer_map(prefix: str) -> dict[str, list[str]]:
+    """Reverse index of presets with a given prefix: ticker -> layer names.
+    e.g. prefix='AI ' indexes 'AI Platforms', 'AI Silicon', ...
+         prefix='Space ' indexes 'Space Primes', 'Space SpaceX Suppliers', ..."""
     layer_map: dict[str, list[str]] = defaultdict(list)
     for preset_name, tickers in PRESET_WATCHLISTS.items():
-        if not preset_name.startswith("AI "):
+        if not preset_name.startswith(prefix):
             continue
-        layer = preset_name.replace("AI ", "")
+        layer = preset_name.replace(prefix, "")
         for t in tickers:
             layer_map[t].append(layer)
     return dict(layer_map)
 
 
-_LAYER_MAP = _build_layer_map()
+_LAYER_MAPS = {
+    "AI": _build_layer_map("AI "),
+    "SPACE": _build_layer_map("Space "),
+}
 
 
-def _layers_for(ticker: str) -> list[str]:
-    return _LAYER_MAP.get(ticker, [])
+def _layers_for(ticker: str, mode: str = "AI") -> list[str]:
+    mode_key = mode.upper() if mode else "AI"
+    if mode_key == "US":
+        mode_key = "AI"  # US scan universe aliases AI_LIST
+    return _LAYER_MAPS.get(mode_key, {}).get(ticker, [])
 
 
 def _signal_side(signal: dict) -> str:
@@ -129,30 +154,6 @@ def classify_signal(signal: dict) -> tuple[str, str | None]:
     return "WATCH", f"中等信心 ({confidence})"
 
 
-def _fmt_news_lines(news_str: str | None, max_items: int = 2) -> list[str]:
-    """Parse the news_str produced by core.news.get_market_news into a small
-    list of trimmed headline lines with 📰 prefix. Returns [] when news is
-    empty, an error placeholder, or unparseable."""
-    if not news_str:
-        return []
-    if news_str.startswith("No recent") or news_str.startswith("Could not"):
-        return []
-    out: list[str] = []
-    for raw in news_str.split("\n"):
-        raw = raw.strip()
-        if not raw.startswith("- "):
-            continue
-        # Format from news.py: "- Title: Body". Keep title only — body is noisy.
-        text = raw[2:]
-        title = text.split(": ", 1)[0]
-        title = title[:90].rstrip()
-        if title:
-            out.append(f"  📰 {title}")
-        if len(out) >= max_items:
-            break
-    return out
-
-
 def _fmt_track_line(sim_stats: dict | None) -> str:
     """Render the per-ticker 3y mini-backtest stats. Shows raw WR alongside
     a Wilson 95% lower bound — small samples get visibly honest credit
@@ -170,14 +171,14 @@ def _fmt_track_line(sim_stats: dict | None) -> str:
     return f"  3年: 勝率 {wr}% / {trades} 筆"
 
 
-def _fmt_signal_line(signal: dict, include_plan: bool) -> str:
+def _fmt_signal_line(signal: dict, include_plan: bool, mode: str = "AI") -> str:
     ticker = signal["ticker"]
     strategy_key = _normalize_strategy(signal.get("strategy", ""))
     strategy_name = STRATEGY_DISPLAY.get(strategy_key, strategy_key.title())
     side = _signal_side(signal)
     side_cn = {"LONG": "多", "SHORT": "空"}.get(side, side)
     confidence = signal.get("confidence", "?")
-    layers = _layers_for(ticker)
+    layers = _layers_for(ticker, mode=mode)
     layer_label = ", ".join(_LAYER_CN.get(l, l) for l in layers) if layers else "—"
     price = signal.get("price")
 
@@ -201,7 +202,7 @@ def _fmt_signal_line(signal: dict, include_plan: bool) -> str:
     if track:
         parts.append(track)
 
-    parts.extend(_fmt_news_lines(signal.get("news")))
+    parts.extend(format_news_lines(signal.get("news")))
 
     return "\n".join(parts)
 
@@ -235,12 +236,12 @@ def _strategy_edge_block() -> str:
     return "\n".join(lines)
 
 
-def _layer_block(signals: list[dict]) -> str:
+def _layer_block(signals: list[dict], mode: str = "AI") -> str:
     """Group take/watch/skip signals by layer for fast scanning."""
     by_layer: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for s in signals:
         verdict, _ = classify_signal(s)
-        layers = _layers_for(s["ticker"]) or ["—"]
+        layers = _layers_for(s["ticker"], mode=mode) or ["—"]
         marker = {"TAKE": "", "WATCH": " ⚠️", "SKIP": " ✗"}[verdict]
         for layer in layers:
             by_layer[layer].append((s["ticker"], marker))
@@ -248,14 +249,15 @@ def _layer_block(signals: list[dict]) -> str:
     if not by_layer:
         return ""
 
-    lines = ["🏭 *AI 產業鏈分布*"]
+    mode_label = _MODE_DISPLAY.get(mode.upper() if mode else "AI", "AI")
+    lines = [f"🏭 *{mode_label} 產業鏈分布*"]
     for layer in sorted(by_layer.keys()):
         entries = ", ".join(f"{t}{m}" for t, m in by_layer[layer])
         lines.append(f"• {_LAYER_CN.get(layer, layer)}: {entries}")
     return "\n".join(lines)
 
 
-def _signal_block(verdict: str, signals: list[dict]) -> str:
+def _signal_block(verdict: str, signals: list[dict], mode: str = "AI") -> str:
     if not signals:
         return ""
     headers = {
@@ -267,7 +269,7 @@ def _signal_block(verdict: str, signals: list[dict]) -> str:
     body_lines = [title, ""]
     for s in signals:
         include_plan = verdict == "TAKE"
-        body_lines.append(_fmt_signal_line(s, include_plan=include_plan))
+        body_lines.append(_fmt_signal_line(s, include_plan=include_plan, mode=mode))
         if verdict in ("WATCH", "SKIP"):
             _, reason = classify_signal(s)
             if reason:
@@ -280,16 +282,20 @@ def build_report(
     total_scanned: int,
     scan_date: datetime | None = None,
     market_block: str | None = None,
+    mode: str = "AI",
 ) -> str:
     """Build a single-string scan report (may exceed Telegram limit; see
     build_report_messages for chunking).
 
-    Order: header → 大盤 → Fed 日曆 → Take/Watch/Skip → 策略邊際 → AI 產業鏈 → 免責.
+    Order: header → 大盤 → Fed 日曆 → Take/Watch/Skip → 策略邊際 → 產業鏈 → 免責.
     `market_block` defaults to a live fetch via market_analysis.format_market_block;
-    pass a pre-formatted string for testing or to skip the network call."""
+    pass a pre-formatted string for testing or to skip the network call.
+    `mode` ('AI' / 'SPACE') drives title + layer attribution; strategy edge stats
+    are always shown from the AI universe (only place they've been backtested)."""
     if scan_date is None:
         scan_date = datetime.now(timezone.utc)
     date_str = scan_date.strftime("%Y-%m-%d")
+    mode_label = _MODE_DISPLAY.get(mode.upper() if mode else "AI", "AI")
 
     if market_block is None:
         market_block = format_market_block()
@@ -297,11 +303,11 @@ def build_report(
 
     if not signals:
         return (
-            f"*OpenClaw AI 掃描*  ·  {date_str}\n"
+            f"*OpenClaw {mode_label} 掃描*  ·  {date_str}\n"
             f"{total_scanned} 個標的 · 0 訊號\n\n"
             f"{market_block}\n\n"
             f"{calendar_block}\n\n"
-            f"AI 標的池今日無訊號。\n\n"
+            f"{mode_label} 標的池今日無訊號。\n\n"
             f"{_strategy_edge_block()}\n\n"
             f"_⚠️ 非投資建議_"
         )
@@ -313,18 +319,18 @@ def build_report(
         buckets[verdict].append(s)
 
     header = (
-        f"*OpenClaw AI 掃描*  ·  {date_str}\n"
+        f"*OpenClaw {mode_label} 掃描*  ·  {date_str}\n"
         f"{total_scanned} 個標的 · {len(signals)} 訊號 · {_regime_summary(signals)}"
     )
 
     parts = [header, market_block, calendar_block]
     for verdict in ("TAKE", "WATCH", "SKIP"):
-        block = _signal_block(verdict, buckets[verdict])
+        block = _signal_block(verdict, buckets[verdict], mode=mode)
         if block:
             parts.append(block)
 
     parts.append(_strategy_edge_block())
-    parts.append(_layer_block(signals))
+    parts.append(_layer_block(signals, mode=mode))
     parts.append("_⚠️ 非投資建議_")
 
     return "\n\n".join(p for p in parts if p)
@@ -335,9 +341,10 @@ def build_report_messages(
     total_scanned: int,
     scan_date: datetime | None = None,
     market_block: str | None = None,
+    mode: str = "AI",
 ) -> list[str]:
     """Return the report split into Telegram-safe chunks."""
-    full = build_report(signals, total_scanned, scan_date, market_block=market_block)
+    full = build_report(signals, total_scanned, scan_date, market_block=market_block, mode=mode)
     if len(full) <= TELEGRAM_SAFE_CHUNK:
         return [full]
 

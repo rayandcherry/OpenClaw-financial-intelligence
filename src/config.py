@@ -10,15 +10,6 @@ load_dotenv()
 # Override via ACCOUNT_BALANCE env var. Default reflects current personal account.
 ACCOUNT_BALANCE = float(os.getenv("ACCOUNT_BALANCE", "30000"))
 
-# Asset Lists
-
-CRYPTO_ASSETS = [
-    "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD",
-    "AVAX-USD", "DOGE-USD", "DOT-USD", "TRX-USD", "LINK-USD", "MATIC-USD",
-    "SHIB-USD", "LTC-USD", "BCH-USD", "UNI-USD", "NEAR-USD", "ATOM-USD",
-    "ICP-USD", "FIL-USD", "APT-USD"
-]
-
 # US AI Industry Chain (curated). Deduped union of all layered presets below.
 # Used by `--mode AI` in scan.py / simulate.py / mcp_server.py.
 AI_LIST = [
@@ -55,6 +46,42 @@ AI_LIST = [
 # (banks/drugs/index ETFs/crypto proxies) was retired in favor of the curated
 # AI industry chain. `--mode US` and `--mode AI` are now equivalent.
 US_STOCKS = AI_LIST
+
+# US Space Industry Chain (curated). Broad aerospace/space-economy exposure,
+# intentionally kept disjoint from AI_LIST so concentration caps don't
+# double-count names. Used by `--mode SPACE` in scan.py / simulate.py /
+# mcp_server.py.
+#
+# NOTE on "SpaceX supplier" framing: SpaceX is heavily vertically integrated
+# and most public-listed companies are NOT verified direct SpaceX suppliers.
+# The "Aerospace Components" layer below is broad space-industry components
+# (actuators, valves, castings, composites) used across launch vehicles,
+# satellites, and crewed spacecraft programs — NOT a claim of confirmed
+# SpaceX contracts. If verified contract disclosure matters, treat the
+# "supplier" angle as a hypothesis, not a fact.
+SPACE_LIST = [
+    # Defense primes (satellite buses, ULA partners, Starliner competitor)
+    "LMT", "NOC", "RTX", "LHX", "BA", "TXT",
+    # Aerospace components (broad — actuators/valves, electronics, composites,
+    # controls; used across launch, satellite, and crewed-spacecraft programs)
+    "MOG-A", "HEI", "HON", "TDG", "HWM", "DCO", "WWD", "PKE",
+    # Defense electronics & instruments (Teledyne: space sensors/cameras;
+    # Curtiss-Wright: defense electronics & nuclear; Mercury: RF & processing)
+    "TDY", "CW", "MRCY",
+    # Propulsion / hypersonic / nuclear thermal
+    "KTOS", "BWXT",
+    # Satellite operators & New Space (Rocket Lab: small launch + components;
+    # AST SpaceMobile: Starlink direct competitor; Iridium: incumbent satcom;
+    # Globalstar: Apple satellite partner; Planet/BlackSky: earth obs;
+    # Virgin Galactic: tourism; Viasat: broadband + Inmarsat; EchoStar:
+    # geo satcom; Redwire: pure-play space infra)
+    "RKLB", "ASTS", "IRDM", "GSAT", "PL", "BKSY", "SPCE",
+    "VSAT", "SATS", "RDW",
+    # Defense IT / sensors / drones / precision GPS
+    "LDOS", "AVAV", "TRMB",
+    # Thematic ETFs — broad aerospace/defense + space-specific
+    "ITA", "PPA", "XAR", "ARKX", "UFO", "ROKT", "NASA",
+]
 
 SP500_TOP_200 = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "LLY", "AVGO",
@@ -160,6 +187,17 @@ PRESET_WATCHLISTS = {
                                 "TTMI", "APH", "TEL"],
     "AI Robotics": ["TSLA", "SYM", "ROK", "ZBRA"],
     "AI ETFs": ["SMH", "SOXX", "QQQ", "XLK", "IGV", "BOTZ", "AIQ"],
+
+    # --- Space Industry Chain (layered, disjoint from AI list) ---
+    "Space Primes": ["LMT", "NOC", "RTX", "LHX", "BA", "TXT"],
+    "Space Aerospace Components": ["MOG-A", "HEI", "HON", "TDG", "HWM", "DCO",
+                                      "WWD", "PKE"],
+    "Space Electronics": ["TDY", "CW", "MRCY"],
+    "Space Propulsion": ["KTOS", "BWXT"],
+    "Space Satellites & New Space": ["RKLB", "ASTS", "IRDM", "GSAT", "PL",
+                                       "BKSY", "SPCE", "VSAT", "SATS", "RDW"],
+    "Space Defense IT/Sensors": ["LDOS", "AVAV", "TRMB"],
+    "Space ETFs": ["ITA", "PPA", "XAR", "ARKX", "UFO", "ROKT", "NASA"],
 }
 
 # Strategy edge stats from 3y AI universe solo backtests. Refreshed
@@ -219,6 +257,19 @@ ASSET_TIERS = {
     "SMH": "A", "SOXX": "A", "QQQ": "A", "XLK": "A", "IGV": "A",
     # Thematic AI ETFs — smaller AUM, more concentrated, higher beta. Tier B.
     "BOTZ": "B", "AIQ": "B",
+
+    # --- Space industry: defense primes & deep-pocketed contractors ---
+    "LMT": "A", "NOC": "A", "RTX": "A", "LHX": "A", "HON": "A", "TDY": "A",
+    # --- Space industry: profitable mid-caps, narrower exposure ---
+    "BA": "B", "TXT": "B", "HWM": "B", "TDG": "B", "HEI": "B", "MOG-A": "B",
+    "WWD": "B", "CW": "B", "LDOS": "B", "TRMB": "B",
+    # --- Space industry: smaller cap / speculative / SPAC-era ---
+    "DCO": "C", "PKE": "C", "MRCY": "C", "KTOS": "C", "BWXT": "C",
+    "AVAV": "C", "RKLB": "C", "ASTS": "C", "IRDM": "C", "GSAT": "C",
+    "PL": "C", "BKSY": "C", "SPCE": "C", "VSAT": "C", "SATS": "C", "RDW": "C",
+    # --- Space ETFs: broad A&D = Tier A; thematic/space-pure = Tier B ---
+    "ITA": "A", "PPA": "A", "XAR": "A",
+    "ARKX": "B", "UFO": "B", "ROKT": "B", "NASA": "B",
 }
 
 

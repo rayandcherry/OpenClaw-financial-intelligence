@@ -59,20 +59,93 @@ class TestPositionManager(unittest.TestCase):
         """Test TP1 Logic"""
         # Entry 100, ATR 2. Default TP1 = 104
         pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0)
-        
+
         # Move price to 103.9
         res = pos.update(103.9, 2.0)
         self.assertFalse(res['tp1_hit'])
-        
+
         # Move price to 104.1
         res = pos.update(104.1, 2.0)
         self.assertTrue(res['tp1_hit'])
         self.assertEqual(res['action'], "SELL_HALF_TP1")
-        
+
         # Maintain TP1 state (no double alert)
         res = pos.update(105.0, 2.0)
         self.assertTrue(res['tp1_hit'])
         self.assertIsNone(res['action'])
+
+
+class TestDonchianExitMode(unittest.TestCase):
+    """Donchian (Turtle System 2) exit: SL ratchets to rolling N-day low,
+    no breakeven step, no TP1 ladder."""
+
+    def test_initial_sl_honored(self):
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0,
+                              initial_sl=96.0, exit_mode='donchian')
+        self.assertEqual(pos.current_sl, 96.0)
+        self.assertEqual(pos.exit_mode, 'donchian')
+
+    def test_channel_ratchets_sl_up(self):
+        """As the 20-day low rises, SL trails it — never drops."""
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0,
+                              initial_sl=96.0, exit_mode='donchian')
+
+        # Channel low below initial SL — SL doesn't widen.
+        res = pos.update(105, 2.0, donchian_low=92.0)
+        self.assertEqual(res['sl'], 96.0)
+
+        # Channel low rises above initial SL — SL ratchets up.
+        res = pos.update(108, 2.0, donchian_low=98.0)
+        self.assertEqual(res['sl'], 98.0)
+
+        # Channel low pulls back — SL holds.
+        res = pos.update(110, 2.0, donchian_low=95.0)
+        self.assertEqual(res['sl'], 98.0)
+
+        # Channel low jumps higher — SL follows up.
+        res = pos.update(115, 2.0, donchian_low=104.0)
+        self.assertEqual(res['sl'], 104.0)
+
+    def test_no_breakeven_step(self):
+        """Donchian doesn't activate the breakeven flag, even at large gains."""
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0,
+                              initial_sl=96.0, exit_mode='donchian')
+        pos.update(120, 2.0, donchian_low=110.0)
+        self.assertFalse(pos.is_breakeven_active)
+
+    def test_no_tp1_alert(self):
+        """No SELL_HALF_TP1 alert in Donchian mode — full trend ride."""
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0,
+                              tp1=104.0, exit_mode='donchian')
+        # Same price that would trigger TP1 in ATR mode.
+        res = pos.update(105.0, 2.0, donchian_low=98.0)
+        self.assertFalse(res['tp1_hit'])
+        self.assertIsNone(res['action'])
+
+    def test_channel_breach_exits(self):
+        """Price crossing below current SL fires EXIT_STOP_LOSS."""
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0,
+                              initial_sl=96.0, exit_mode='donchian')
+        pos.update(110, 2.0, donchian_low=104.0)
+        self.assertEqual(pos.current_sl, 104.0)
+        # Price falls back through the channel.
+        res = pos.update(103.0, 2.0, donchian_low=104.0)
+        self.assertEqual(res['action'], "EXIT_STOP_LOSS")
+
+    def test_missing_donchian_low_holds_sl(self):
+        """If donchian_low isn't supplied (e.g. fetch failure), SL stays put."""
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0,
+                              initial_sl=96.0, exit_mode='donchian')
+        res = pos.update(110, 2.0)  # no donchian_low
+        self.assertEqual(res['sl'], 96.0)
+
+    def test_atr_mode_ignores_donchian_low(self):
+        """ATR-mode positions ignore donchian_low entirely (backwards compat)."""
+        pos = PositionManager("TEST", 100, 10, side="LONG", atr_at_entry=2.0)
+        # 20-day low passed in but should not influence ATR-mode SL.
+        res = pos.update(102, 2.0, donchian_low=98.0)
+        self.assertEqual(res['sl'], 94.0)  # original 3×ATR initial SL
+
 
 class TestCapitalAllocator(unittest.TestCase):
     def setUp(self):

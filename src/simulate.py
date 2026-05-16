@@ -6,11 +6,11 @@ import argparse
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.backtest import Backtester, Portfolio
-from src.config import US_STOCKS, SP500_TOP_100, AI_LIST
+from src.config import US_STOCKS, SP500_TOP_100, AI_LIST, SPACE_LIST
 
 def main():
     parser = argparse.ArgumentParser(description="OpenClaw Paper Trading Simulation")
-    parser.add_argument('--mode', type=str, default='US', choices=['US', 'AI', 'CRYPTO', 'ALL', 'SP100'], help='Asset class to backtest')
+    parser.add_argument('--mode', type=str, default='US', choices=['US', 'AI', 'SPACE', 'CRYPTO', 'ALL', 'SP100'], help='Asset class to backtest')
     parser.add_argument('--period', type=str, default='3y', help='Data lookback period (e.g. 1y, 2y, 3y)')
     parser.add_argument('--optimize', action='store_true', help='Run optimization loop to find best parameters')
     parser.add_argument('--strategy', type=str, help='Filter for specific strategy (TRINITY, PANIC, 2B, DONCHIAN)')
@@ -31,6 +31,8 @@ def main():
         tickers = SP500_TOP_100
     elif args.mode == 'AI':
         tickers = AI_LIST
+    elif args.mode == 'SPACE':
+        tickers = SPACE_LIST
     else:
         tickers = US_STOCKS
     

@@ -15,7 +15,7 @@ from core.cache_manager import BacktestCache
 from backtest import Backtester
 from tracker.service import TrackerService
 from tracker.risk import CapitalAllocator
-from config import US_STOCKS, AI_LIST
+from config import US_STOCKS, AI_LIST, SPACE_LIST
 
 _cache = BacktestCache()
 
@@ -63,7 +63,12 @@ def scan(tickers: list[str] = None, mode: str = "US", strategies: list[str] = No
 def handle_scan(tickers=None, mode="US", strategies=None):
     try:
         if tickers is None:
-            tickers = list(AI_LIST) if mode == "AI" else list(US_STOCKS)
+            if mode == "AI":
+                tickers = list(AI_LIST)
+            elif mode == "SPACE":
+                tickers = list(SPACE_LIST)
+            else:
+                tickers = list(US_STOCKS)
         tickers = _filter_tickers_by_mode(tickers, mode)
         signals = scan_market(tickers)
         signals = _filter_signals_by_strategy(signals, strategies)
@@ -253,11 +258,15 @@ def handle_position_update():
         _tracker.save_positions()
         updates = []
         for ticker, pm in _tracker.positions.items():
+            next_earnings = getattr(pm, 'next_earnings', None)
             updates.append({
                 "ticker": ticker,
                 "price": round(pm.current_price, 2) if hasattr(pm, 'current_price') else 0,
                 "sl": round(pm.current_sl, 2),
                 "pnl": round(pm.unrealized_pnl, 2) if hasattr(pm, 'unrealized_pnl') else 0,
+                "next_earnings": next_earnings.isoformat() if next_earnings else None,
+                "earnings_days_away": getattr(pm, 'earnings_days_away', None),
+                "news_lines": getattr(pm, 'news_lines', None) or [],
             })
         return {"updates": updates, "alerts": alerts, "status_report": status_report}
     except Exception as e:

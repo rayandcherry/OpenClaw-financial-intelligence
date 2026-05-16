@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 
-from config import US_STOCKS, AI_LIST
+from config import US_STOCKS, AI_LIST, SPACE_LIST
 from core.scanner import scan_market
 from core.news import get_market_news, news_query_for_ticker
 from core.notifier import send_telegram_report
@@ -27,6 +27,8 @@ def _resolve_tickers(args):
         return mode, [args.ticker]
     if mode == "AI":
         return mode, list(AI_LIST)
+    if mode == "SPACE":
+        return mode, list(SPACE_LIST)
     return mode, list(US_STOCKS)
 
 
@@ -57,7 +59,7 @@ def _enrich_signals(candidates):
 def main():
     parser = argparse.ArgumentParser(description="OpenClaw Real-Time Scanner")
     parser.add_argument('--ticker', type=str, help='Specific ticker to scan (overrides mode)')
-    parser.add_argument('--mode', type=str, choices=['US', 'AI', 'CRYPTO', 'ALL'], help='Asset class to scan')
+    parser.add_argument('--mode', type=str, choices=['US', 'AI', 'SPACE', 'CRYPTO', 'ALL'], help='Asset class to scan')
     parser.add_argument('--json', action='store_true', help='Output results in JSON format (Agent Mode)')
     args = parser.parse_args()
 
@@ -70,14 +72,14 @@ def main():
 
     if not candidates:
         print("No candidates found matching strategies.")
-        report = build_report([], total_scanned=len(target_tickers))
+        report = build_report([], total_scanned=len(target_tickers), mode=mode)
         send_telegram_report(report)
         return
 
     print("\n📰 Enriching signals (3y sim + news)...")
     _enrich_signals(candidates)
 
-    report = build_report(candidates, total_scanned=len(target_tickers))
+    report = build_report(candidates, total_scanned=len(target_tickers), mode=mode)
     print("\n📨 Sending Report...")
     print("-" * 40)
     print(report)

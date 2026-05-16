@@ -6,8 +6,7 @@ try:
 except ImportError:  # fallback for old envs still on the renamed package
     from duckduckgo_search import DDGS
 
-# Strip characters that could break out of a fenced context or carry
-# instruction-like content into the LLM prompt.
+# Strip backticks/newlines so headlines render cleanly inside Telegram-MD.
 _SANITIZE_RE = re.compile(r'[`\r\n]+')
 
 # Freshness: drop anything older than this when we can parse a date.
@@ -46,7 +45,7 @@ def news_query_for_ticker(ticker: str) -> str:
 
 
 def _sanitize(text: str) -> str:
-    """Single-line, no-backticks — defensive against prompt injection via news."""
+    """Single-line, no-backticks — keeps headlines safe inside Telegram-MD."""
     if not text:
         return ""
     flat = _SANITIZE_RE.sub(' ', str(text))
@@ -70,6 +69,32 @@ def _is_fresh(raw_date) -> bool:
         return datetime.now(timezone.utc) - dt <= timedelta(days=_MAX_AGE_DAYS)
     except (ValueError, TypeError):
         return True
+
+
+def format_news_lines(news_str, max_items=2, prefix="  📰 ", title_max_len=90):
+    """Turn the raw string from get_market_news() into a small list of trimmed
+    headline lines suitable for the daily report / monitor.
+
+    Returns [] when the string is empty, an error placeholder, or unparseable.
+    Body text is discarded — only the title before the first ": " is kept.
+    """
+    if not news_str:
+        return []
+    if news_str.startswith("No recent") or news_str.startswith("Could not"):
+        return []
+    out = []
+    for raw in news_str.split("\n"):
+        raw = raw.strip()
+        if not raw.startswith("- "):
+            continue
+        text = raw[2:]
+        title = text.split(": ", 1)[0]
+        title = title[:title_max_len].rstrip()
+        if title:
+            out.append(f"{prefix}{title}")
+        if len(out) >= max_items:
+            break
+    return out
 
 
 def get_market_news(query, max_results=3):

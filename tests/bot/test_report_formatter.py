@@ -1,6 +1,7 @@
 import pytest
 from src.bot.services.report_formatter import ReportFormatter
-from src.core.report_builder import classify_signal, _fmt_news_lines, _fmt_track_line
+from src.core.news import format_news_lines as _fmt_news_lines
+from src.core.report_builder import classify_signal, _fmt_track_line
 
 
 @pytest.fixture

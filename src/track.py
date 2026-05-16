@@ -4,9 +4,6 @@ import os
 import sys
 from datetime import datetime
 
-import sys
-import os
-
 # Add Project Root and Src to Path to handle mixed imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
@@ -14,7 +11,6 @@ sys.path.append(project_root)
 sys.path.append(current_dir)
 
 from src.tracker.service import TrackerService
-from src.tracker.position import PositionManager
 
 POSITIONS_FILE = "data/positions.json"
 
@@ -25,7 +21,11 @@ def load_positions(service):
         with open(POSITIONS_FILE, 'r') as f:
             data = json.load(f)
             for p in data:
-                service.add_position(p['ticker'], p['entry_price'], p['qty'], p['side'], p.get('tp1'))
+                mode = p.get('exit_mode')
+                strategy = 'donchian' if mode == 'donchian' else None
+                service.add_position(p['ticker'], p['entry_price'], p['qty'],
+                                      p['side'], p.get('tp1'),
+                                      strategy=strategy)
                 # Restore state (simplified for MVP)
                 if 'sl' in p:
                     service.positions[p['ticker']].current_sl = p['sl']
@@ -45,7 +45,8 @@ def save_positions(service):
             "tp1": pos.tp1,
             "sl": pos.current_sl,
             "breakeven": pos.is_breakeven_active,
-            "tp1_hit": pos.tp1_hit
+            "tp1_hit": pos.tp1_hit,
+            "exit_mode": pos.exit_mode,
         })
     
     os.makedirs("data", exist_ok=True)
@@ -56,7 +57,6 @@ def _build_telegram_summary(service, status_report, alerts, total_tax):
     """Format the monitor output as a Telegram-Markdown-V1 message.
     `status_report` and `alerts` come from TrackerService.update_market() —
     we re-derive structured fields off `service.positions` for a clean layout."""
-    from datetime import datetime
     date_str = datetime.now().strftime("%b %d, %Y")
 
     parts = [f"*📊 Position Monitor* · {date_str}"]
@@ -87,11 +87,29 @@ def _build_telegram_summary(service, status_report, alerts, total_tax):
             health = p._get_health_status()
             be_mark = " 🔒" if p.is_breakeven_active else ""
             tp_mark = " · TP1✓" if p.tp1_hit else ""
-            pos_lines.append(
+            block = [
                 f"`{p.ticker}` ×{int(p.qty) if p.qty == int(p.qty) else p.qty} @ ${p.entry_price:.2f} → "
-                f"${p.current_price:.2f} ({pnl_str})\n"
-                f"  SL ${p.current_sl:.2f} · {health}{be_mark}{tp_mark}"
-            )
+                f"${p.current_price:.2f} ({pnl_str})",
+                f"  SL ${p.current_sl:.2f} · {health}{be_mark}{tp_mark}",
+            ]
+            # Earnings calendar (set by update_market as a side effect)
+            next_earnings = getattr(p, 'next_earnings', None)
+            if next_earnings is not None:
+                days = getattr(p, 'earnings_days_away', None)
+                if days is None:
+                    day_label = "?"
+                elif days == 0:
+                    day_label = "today"
+                elif days > 0:
+                    day_label = f"T-{days}"
+                else:
+                    day_label = f"T+{abs(days)}"
+                near_mark = " ⚠️" if days is not None and 0 <= days <= 5 else ""
+                block.append(f"  📅 {next_earnings.isoformat()} ({day_label}){near_mark}")
+            # Per-position news headlines (already prefixed with "  📰 ")
+            news_lines = getattr(p, 'news_lines', None) or []
+            block.extend(news_lines)
+            pos_lines.append("\n".join(block))
         parts.append("\n".join(pos_lines))
 
     if total_tax > 0:
@@ -111,7 +129,10 @@ def main():
     add_parser.add_argument("price", type=float, help="Entry Price")
     add_parser.add_argument("qty", type=float, help="Quantity")
     add_parser.add_argument("--side", type=str, default="LONG", choices=["LONG", "SHORT"])
-    add_parser.add_argument("--tp1", type=float, help="Target Profit 1 (Ladder Exit)")
+    add_parser.add_argument("--tp1", type=float, help="Target Profit 1 (Ladder Exit, ATR mode only)")
+    add_parser.add_argument("--strategy", type=str, default=None,
+                             choices=["donchian", "trinity", "panic", "2b"],
+                             help="Origin strategy. 'donchian' switches to Turtle channel exit; others use ATR trail.")
     
     # LIST/UPDATE
     monitor_parser = subparsers.add_parser("monitor", help="Update market data and show status")
@@ -135,7 +156,8 @@ def main():
     load_positions(service)
     
     if args.command == "add":
-        service.add_position(args.ticker, args.price, args.qty, args.side, args.tp1)
+        service.add_position(args.ticker, args.price, args.qty, args.side, args.tp1,
+                              strategy=args.strategy)
         save_positions(service)
         print(f"✅ Added {args.ticker}")
         
