@@ -71,7 +71,6 @@ def scan_market(tickers, max_workers=10):
         future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers}
         
         for future in as_completed(future_to_ticker):
-            # ticker = future_to_ticker[future]
             try:
                 result = future.result()
                 if result:

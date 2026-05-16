@@ -19,7 +19,7 @@ pytest tests/test_tracker_unit.py::TestPositionManager::test_long_lifecycle  # s
 pytest -m integration  # integration tests only (requires real APIs)
 
 # Scanner
-python src/main.py                          # full scan, all assets
+python src/scan.py                           # full AI-list scan
 python src/scan.py --mode US --ticker NVDA   # targeted scan
 python src/scan.py --json                    # agent/JSON output mode
 
@@ -51,7 +51,7 @@ pytest tests/bot/test_handlers.py::test_scan_handler_returns_report -v  # single
 ## Architecture
 
 ### Entry Points
-- `src/main.py` / `src/scan.py` — Scanner pipeline (scan → backtest cache → LLM report → Telegram)
+- `src/scan.py` — Scanner pipeline (scan → backtest cache → programmatic report → Telegram)
 - `src/simulate.py` — Backtesting engine with optimization mode
 - `src/track.py` — CLI position tracker (add/monitor/size/remove subcommands)
 - `src/optimize.py` — Parameter grid search across SP500
@@ -62,9 +62,11 @@ pytest tests/bot/test_handlers.py::test_scan_handler_returns_report -v  # single
 - `indicators.py` — Technical indicators: SMA, EMA, RSI, Bollinger Bands, MACD, ATR, Volume Profile, Regime detection
 - `data_fetcher.py` — yfinance market data
 - `news.py` — DuckDuckGo news enrichment
-- `llm_client.py` — Gemini API with ordered model fallback (2.5-flash → 2.0-flash → 1.5-pro → 1.5-flash → pro)
-- `cache_manager.py` — Backtest stats cache with 7-day TTL, keyed by `{ticker}_{period}`
-- `notifier.py` — Telegram delivery, falls back to stdout
+- `market_analysis.py` — Broad-market gauges (SPY/QQQ/SMH/VIX/10Y/DXY) + 風險偏好 verdict
+- `fed_calendar.py` — FOMC + CPI/PCE/NFP/Retail/Beige Book proactive calendar
+- `report_builder.py` — Programmatic Chinese scan report (replaces former Gemini-driven path)
+- `cache_manager.py` — Backtest stats cache with 7-day TTL, keyed by `{ticker}_{period}_{params_hash}`
+- `notifier.py` — Telegram delivery (legacy single-chat), falls back to stdout
 
 ### Tracker Modules (`src/tracker/`)
 - `service.py` — Main tracking service
@@ -87,11 +89,10 @@ pytest tests/bot/test_handlers.py::test_scan_handler_returns_report -v  # single
 - `bot/db/models.py` — SQLAlchemy: User, UserWatchlist, UserSchedule, ScanLog (JSON for strategies, not ARRAY)
 - `bot/health.py` — aiohttp `/health` on port 8080
 
-### LLM Integration
-- System prompt lives in `src/prompts/SOUL.md`
-- Gemini API key via `GEMINI_API_KEY` env var
+### Delivery
 - Legacy scanner delivery via `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID`
 - Bot delivery via `TELEGRAM_BOT_TOKEN` (python-telegram-bot)
+- No LLM in the automated pipeline — analysis is produced interactively by Claude in chat, never via an autonomous API caller in cron
 
 ## Key Patterns
 

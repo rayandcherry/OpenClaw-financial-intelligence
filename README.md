@@ -2,11 +2,11 @@
 
 **OpenClaw** is a comprehensive, AI-driven financial intelligence system designed to **Scan**, **Verify**, and **Track** high-probability trading setups in US Equities and Cryptocurrencies.
 
-It combines technical analysis algorithms, historical backtesting, and LLM-based intelligence to deliver actionable signals, and provides a dedicated tracker to manage risk during execution.
+It combines technical analysis algorithms, historical backtesting, and a programmatic report builder to deliver actionable signals, and provides a dedicated tracker to manage risk during execution.
 
 ## 🚀 Key Features
 
-### 1. Intelligent Scanning (`src/main.py`)
+### 1. Intelligent Scanning (`src/scan.py`)
 *   **Multi-Asset:** Covers US Blue Chips and Top 20 Cryptocurrencies.
 *   **Strategies:**
     *   🛡️ **Trinity:** Trend following (Pullback to EMA50 in Uptrend).
@@ -48,7 +48,7 @@ It combines technical analysis algorithms, historical backtesting, and LLM-based
 ### Mode A: Market Scanner (Discover)
 Run the daily scanner to find opportunities:
 ```bash
-python src/main.py
+python src/scan.py
 ```
 *   *Output:* Telegram report with AI insights + Historical Win Rate.
 
@@ -102,7 +102,7 @@ graph TD
     classDef ext fill:#dfd,stroke:#333,stroke-width:2px;
 
     %% Entry Points
-    EntryMain["src/main.py\n(Scanner)"]:::core
+    EntryMain["src/scan.py\n(Scanner)"]:::core
     EntrySim["src/simulate.py\n(Simulation)"]:::core
     EntryTrack["src/track.py\n(Tracker CLI)"]:::tracker
 
@@ -116,7 +116,6 @@ graph TD
         DataFetch[core/data_fetcher.py]:::core
         Cache["core/cache_manager.py\n(Backtest Cache)"]:::core
         News[core/news.py]:::core
-        LLM[core/llm_client.py]:::core
         Notifier[core/notifier.py]:::core
     end
 
@@ -137,7 +136,6 @@ graph TD
     subgraph External APIs
         YF[Yahoo Finance]:::ext
         DDG[DuckDuckGo]:::ext
-        Gemini[Google Gemini]:::ext
         TG[Telegram]:::ext
     end
 
@@ -165,7 +163,6 @@ graph TD
     %% Common
     DataFetch --> YF
     News --> DDG
-    LLM --> Gemini
     Notifier --> TG
 ```
 
@@ -174,7 +171,7 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant Market
-    participant Scanner as main.py
+    participant Scanner as scan.py
     participant Cache as CacheManager
     participant User
     participant Tracker as track.py

@@ -1,6 +1,5 @@
 yfinance
 pandas
-google-genai
 ddgs
 requests
 python-dotenv
